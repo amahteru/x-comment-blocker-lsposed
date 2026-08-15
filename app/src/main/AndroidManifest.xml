@@ -45,11 +45,6 @@
             android:exported="false"
             android:parentActivityName=".ui.MainActivity" />
 
-        <activity
-            android:name=".ui.TestFilterActivity"
-            android:exported="false"
-            android:parentActivityName=".ui.MainActivity" />
-
         <!-- ContentProvider for cross-process preferences sharing with LSPosed/Xposed -->
         <provider
             android:name=".data.ConfigProvider"

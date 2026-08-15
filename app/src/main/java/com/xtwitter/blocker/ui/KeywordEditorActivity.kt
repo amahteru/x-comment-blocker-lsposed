@@ -4,7 +4,11 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.widget.Toast
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.core.widget.addTextChangedListener
 import com.xtwitter.blocker.data.ConfigManager
 import com.xtwitter.blocker.data.PrefsConstants
@@ -18,6 +22,7 @@ class KeywordEditorActivity : AppCompatActivity() {
     private var mode = MODE_USER_KEYWORDS
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         binding = ActivityKeywordEditorBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -25,9 +30,24 @@ class KeywordEditorActivity : AppCompatActivity() {
         mode = intent.getIntExtra(EXTRA_MODE, MODE_USER_KEYWORDS)
         prefs = getSharedPreferences(PrefsConstants.PREFS_NAME, Context.MODE_PRIVATE)
 
+        setupInsets()
         setupToolbar()
         loadData()
         setupListeners()
+    }
+
+    private fun setupInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(binding.appBarLayout) { v, insets ->
+            val statusBarInsets = insets.getInsets(WindowInsetsCompat.Type.statusBars())
+            v.updatePadding(top = statusBarInsets.top)
+            insets
+        }
+
+        ViewCompat.setOnApplyWindowInsetsListener(binding.contentLayout) { v, insets ->
+            val navInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars() or WindowInsetsCompat.Type.ime())
+            v.updatePadding(bottom = navInsets.bottom + 16)
+            insets
+        }
     }
 
     private fun setupToolbar() {

@@ -2,6 +2,16 @@
     <string name="app_name">X Comment Blocker</string>
     <string name="xposed_description">X (Twitter) 评论区垃圾信息与广告过滤器</string>
     
+    <!-- Navigation Tabs -->
+    <string name="nav_tab_dashboard">概览</string>
+    <string name="nav_tab_rules">词库</string>
+    <string name="nav_tab_settings">设置</string>
+    
+    <!-- Page Titles -->
+    <string name="title_dashboard">X Comment Blocker</string>
+    <string name="title_rules">词库管理</string>
+    <string name="title_settings">设置与关于</string>
+
     <!-- Dashboard Strings -->
     <string name="status_module_active">模块生效中</string>
     <string name="status_module_inactive">模块未激活</string>
@@ -17,17 +27,41 @@
     <string name="switch_block_grok">过滤包含 Grok 卡片的评论</string>
     <string name="switch_cloud_sync">自动同步云端屏蔽词库</string>
 
-    <string name="btn_edit_user_keywords">自定义屏蔽词库</string>
-    <string name="btn_edit_whitelist">白名单管理</string>
-    <string name="btn_test_filter">测试匹配效果</string>
+    <!-- Rules Strings -->
+    <string name="card_title_cloud_keywords">云端屏蔽词库</string>
+    <string name="card_desc_cloud_keywords">由社区维护的高频垃圾评论及博彩推广特征词</string>
+    <string name="card_title_user_keywords">自定义屏蔽词库</string>
+    <string name="card_desc_user_keywords">添加您自定义的屏蔽关键词或正则表达式</string>
+    <string name="card_title_whitelist">白名单用户管理</string>
+    <string name="card_desc_whitelist">白名单中用户的推文与评论将永不被拦截</string>
+    <string name="btn_edit_user_keywords">编辑自定义词库</string>
+    <string name="btn_edit_whitelist">编辑白名单</string>
     <string name="btn_sync_now">立即同步云端词库</string>
     
-    <string name="stat_blocked_comments">已拦截评论/广告数</string>
-    <string name="stat_cloud_keywords">云端词库条数</string>
-    <string name="stat_user_keywords">自定义词库条数</string>
+    <!-- Statistics -->
+    <string name="stat_blocked_comments">已拦截</string>
+    <string name="stat_cloud_keywords">云端词库</string>
+    <string name="stat_user_keywords">自定义词</string>
+    <string name="stat_whitelist_count">白名单</string>
     <string name="stat_last_sync">上次同步时间：%s</string>
     <string name="never_synced">从未</string>
     
+    <!-- Settings & About Strings -->
+    <string name="settings_section_lsposed">LSPosed 状态与配置</string>
+    <string name="settings_lsposed_guide_title">模块生效步骤</string>
+    <string name="settings_lsposed_step1">1. 在 LSPosed 管理器中启用 X Comment Blocker 模块</string>
+    <string name="settings_lsposed_step2">2. 在作用域列表勾选「X (Twitter)」与「X Comment Blocker」</string>
+    <string name="settings_lsposed_step3">3. 强行停止或重启 X (Twitter) 客户端应用</string>
+    <string name="settings_section_about">关于与支持</string>
+    <string name="settings_app_info">关于应用</string>
+    <string name="settings_version_label">版本号</string>
+    <string name="settings_target_scope">作用域应用</string>
+    <string name="settings_target_scope_val">com.twitter.android</string>
+    <string name="settings_github_title">开源主页</string>
+    <string name="settings_github_desc">访问项目仓库查看更新与提交 Issue</string>
+    <string name="settings_open_lsposed">打开 LSPosed 管理器</string>
+    <string name="settings_open_lsposed_fail">未安装或无法打开 LSPosed 管理器</string>
+
     <!-- Keyword Editor -->
     <string name="keyword_editor_title">编辑词库</string>
     <string name="keyword_editor_hint">每行一个屏蔽词或正则（如 /regex/i）</string>
@@ -35,12 +69,4 @@
     <string name="btn_import">导入</string>
     <string name="btn_export">导出</string>
     <string name="save_success">保存成功</string>
-    
-    <!-- Test Filter -->
-    <string name="test_filter_title">匹配测试</string>
-    <string name="test_input_hint">输入评论或推文内容测试过滤效果...</string>
-    <string name="test_username_hint">输入用户名（可选）</string>
-    <string name="btn_run_test">测试匹配</string>
-    <string name="test_result_pass">结果：【放行】未命中任何屏蔽规则</string>
-    <string name="test_result_block">结果：【拦截】命中规则：%s</string>
 </resources>

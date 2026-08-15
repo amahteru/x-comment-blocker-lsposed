@@ -1,24 +1,21 @@
 package com.xtwitter.blocker.ui
 
 import android.content.Context
-import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
-import android.widget.Toast
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.lifecycleScope
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
+import androidx.fragment.app.Fragment
+import androidx.viewpager2.adapter.FragmentStateAdapter
+import androidx.viewpager2.widget.ViewPager2
 import com.xtwitter.blocker.R
-import com.xtwitter.blocker.data.CloudSyncManager
 import com.xtwitter.blocker.data.ConfigManager
 import com.xtwitter.blocker.data.PrefsConstants
 import com.xtwitter.blocker.databinding.ActivityMainBinding
 import com.xtwitter.blocker.engine.SpamFilterEngine
-import com.xtwitter.blocker.hook.ModuleState
-import com.xtwitter.blocker.hook.ModuleStatus
-import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
@@ -26,6 +23,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var prefs: SharedPreferences
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -33,14 +31,12 @@ class MainActivity : AppCompatActivity() {
         prefs = getSharedPreferences(PrefsConstants.PREFS_NAME, Context.MODE_PRIVATE)
 
         initDefaultAssetsIfNeeded()
-        setupUI()
-        loadPreferences()
+        setupInsets()
+        setupNavigation()
     }
 
     override fun onResume() {
         super.onResume()
-        updateStats()
-        updateStatusCard(binding.switchMaster.isChecked)
         ConfigManager.fromContext(this).loadToEngine(SpamFilterEngine.instance, this)
     }
 
@@ -54,133 +50,61 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun setupUI() {
-        binding.switchMaster.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean(PrefsConstants.KEY_ENABLED, isChecked).apply()
-            updateStatusCard(isChecked)
-            ConfigManager.fromContext(this).loadToEngine(SpamFilterEngine.instance, this)
-        }
-
-        binding.switchBlockPromoted.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean(PrefsConstants.KEY_BLOCK_PROMOTED, isChecked).apply()
-            ConfigManager.fromContext(this).loadToEngine(SpamFilterEngine.instance, this)
-        }
-
-        binding.switchCheckUsername.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean(PrefsConstants.KEY_CHECK_USERNAME, isChecked).apply()
-            ConfigManager.fromContext(this).loadToEngine(SpamFilterEngine.instance, this)
-        }
-
-        binding.switchBlockSpecialChars.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean(PrefsConstants.KEY_BLOCK_SPECIAL_CHARS, isChecked).apply()
-            ConfigManager.fromContext(this).loadToEngine(SpamFilterEngine.instance, this)
-        }
-
-        binding.switchBlockEmoji.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean(PrefsConstants.KEY_BLOCK_EMOJI, isChecked).apply()
-            ConfigManager.fromContext(this).loadToEngine(SpamFilterEngine.instance, this)
-        }
-
-        binding.switchBlockGrok.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean(PrefsConstants.KEY_BLOCK_GROK, isChecked).apply()
-            ConfigManager.fromContext(this).loadToEngine(SpamFilterEngine.instance, this)
-        }
-
-        binding.btnEditKeywords.setOnClickListener {
-            val intent = Intent(this, KeywordEditorActivity::class.java).apply {
-                putExtra(KeywordEditorActivity.EXTRA_MODE, KeywordEditorActivity.MODE_USER_KEYWORDS)
-            }
-            startActivity(intent)
-        }
-
-        binding.btnEditWhitelist.setOnClickListener {
-            val intent = Intent(this, KeywordEditorActivity::class.java).apply {
-                putExtra(KeywordEditorActivity.EXTRA_MODE, KeywordEditorActivity.MODE_WHITELIST)
-            }
-            startActivity(intent)
-        }
-
-        binding.btnTestFilter.setOnClickListener {
-            startActivity(Intent(this, TestFilterActivity::class.java))
-        }
-
-        binding.btnSyncCloud.setOnClickListener {
-            syncCloudKeywords()
+    private fun setupInsets() {
+        // Handle bottom navigation bar insets so BottomNavigationView respects the system navigation bar / gesture bar
+        ViewCompat.setOnApplyWindowInsetsListener(binding.bottomNav) { v, insets ->
+            val navInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            v.updatePadding(bottom = navInsets.bottom)
+            insets
         }
     }
 
-    private fun loadPreferences() {
-        val isEnabled = prefs.getBoolean(PrefsConstants.KEY_ENABLED, true)
-        binding.switchMaster.isChecked = isEnabled
-        updateStatusCard(isEnabled)
+    private fun setupNavigation() {
+        val fragments = listOf(
+            DashboardFragment(),
+            RulesFragment(),
+            SettingsFragment()
+        )
 
-        binding.switchBlockPromoted.isChecked = prefs.getBoolean(PrefsConstants.KEY_BLOCK_PROMOTED, true)
-        binding.switchCheckUsername.isChecked = prefs.getBoolean(PrefsConstants.KEY_CHECK_USERNAME, true)
-        binding.switchBlockSpecialChars.isChecked = prefs.getBoolean(PrefsConstants.KEY_BLOCK_SPECIAL_CHARS, false)
-        binding.switchBlockEmoji.isChecked = prefs.getBoolean(PrefsConstants.KEY_BLOCK_EMOJI, false)
-        binding.switchBlockGrok.isChecked = prefs.getBoolean(PrefsConstants.KEY_BLOCK_GROK, false)
-    }
+        binding.viewPager.adapter = object : FragmentStateAdapter(this) {
+            override fun getItemCount(): Int = fragments.size
+            override fun createFragment(position: Int): Fragment = fragments[position]
+        }
 
-    private fun updateStatusCard(isEnabled: Boolean) {
-        val isHookActive = ModuleStatus.isModuleActive()
-        val state = ModuleStatus.resolveModuleState(isHookActive = isHookActive, isMasterEnabled = isEnabled)
+        // Disable swipe if desired, or keep smooth switching
+        binding.viewPager.isUserInputEnabled = false
 
-        when (state) {
-            ModuleState.NOT_ACTIVATED -> {
-                binding.ivStatusDot.setBackgroundResource(R.drawable.circle_red)
-                binding.tvStatusTitle.setText(R.string.status_module_inactive)
-                binding.tvStatusSubtitle.setText(R.string.status_desc_inactive)
-            }
-            ModuleState.ACTIVE_ENABLED -> {
-                binding.ivStatusDot.setBackgroundResource(R.drawable.circle_green)
-                binding.tvStatusTitle.setText(R.string.status_module_active)
-                binding.tvStatusSubtitle.setText(R.string.status_desc_active)
-            }
-            ModuleState.ACTIVE_PAUSED -> {
-                binding.ivStatusDot.setBackgroundResource(R.drawable.circle_yellow)
-                binding.tvStatusTitle.setText(R.string.status_module_paused)
-                binding.tvStatusSubtitle.setText(R.string.status_desc_paused)
+        binding.bottomNav.setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_dashboard -> {
+                    binding.viewPager.setCurrentItem(0, false)
+                    true
+                }
+                R.id.nav_rules -> {
+                    binding.viewPager.setCurrentItem(1, false)
+                    true
+                }
+                R.id.nav_settings -> {
+                    binding.viewPager.setCurrentItem(2, false)
+                    true
+                }
+                else -> false
             }
         }
-    }
 
-    private fun updateStats() {
-        val blockedCount = prefs.getInt(PrefsConstants.KEY_BLOCKED_COUNT, 0)
-        binding.tvBlockedCount.text = blockedCount.toString()
-
-        val cloudKeywords = prefs.getString(PrefsConstants.KEY_CLOUD_KEYWORDS, "") ?: ""
-        val cloudCount = if (cloudKeywords.isBlank()) 0 else cloudKeywords.lines().count { it.isNotBlank() }
-        binding.tvCloudKeywordsCount.text = cloudCount.toString()
-
-        val userKeywords = prefs.getString(PrefsConstants.KEY_USER_KEYWORDS, "") ?: ""
-        val userCount = if (userKeywords.isBlank()) 0 else userKeywords.lines().count { it.isNotBlank() }
-        binding.tvUserKeywordsCount.text = userCount.toString()
-
-        val lastSync = prefs.getLong(PrefsConstants.KEY_LAST_SYNC_TIME, 0L)
-        if (lastSync > 0) {
-            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-            binding.tvLastSyncTime.text = getString(R.string.stat_last_sync, sdf.format(Date(lastSync)))
-        } else {
-            binding.tvLastSyncTime.text = getString(R.string.stat_last_sync, getString(R.string.never_synced))
-        }
-    }
-
-    private fun syncCloudKeywords() {
-        binding.btnSyncCloud.isEnabled = false
-        binding.btnSyncCloud.text = "正在同步..."
-
-        lifecycleScope.launch {
-            val result = CloudSyncManager.syncKeywords(this@MainActivity)
-            binding.btnSyncCloud.isEnabled = true
-            binding.btnSyncCloud.setText(R.string.btn_sync_now)
-
-            result.onSuccess { count ->
-                Toast.makeText(this@MainActivity, "云端词库同步成功，共 $count 条", Toast.LENGTH_SHORT).show()
-                updateStats()
-                ConfigManager.fromContext(this@MainActivity).loadToEngine(SpamFilterEngine.instance, this@MainActivity)
-            }.onFailure { err ->
-                Toast.makeText(this@MainActivity, "同步失败: ${err.localizedMessage}", Toast.LENGTH_LONG).show()
+        binding.viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                super.onPageSelected(position)
+                val itemId = when (position) {
+                    0 -> R.id.nav_dashboard
+                    1 -> R.id.nav_rules
+                    2 -> R.id.nav_settings
+                    else -> R.id.nav_dashboard
+                }
+                if (binding.bottomNav.selectedItemId != itemId) {
+                    binding.bottomNav.selectedItemId = itemId
+                }
             }
-        }
+        })
     }
 }
