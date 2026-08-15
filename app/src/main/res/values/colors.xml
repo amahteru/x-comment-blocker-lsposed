@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#1D9BF0</color>
+    <color name="on_primary">#FFFFFF</color>
+    <color name="primary_container">#D4EEFC</color>
+    <color name="on_primary_container">#001F2A</color>
+    
+    <color name="surface">#F7F9F9</color>
+    <color name="on_surface">#0F1419</color>
+    <color name="surface_variant">#E6ECF0</color>
+    <color name="on_surface_variant">#536471</color>
+    
+    <color name="status_green">#00BA7C</color>
+    <color name="status_red">#F4212E</color>
+    <color name="card_background">#FFFFFF</color>
+    <color name="outline">#CFD9DE</color>
+</resources>

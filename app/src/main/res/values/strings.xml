@@ -1,0 +1,42 @@
+<resources>
+    <string name="app_name">X Comment Blocker</string>
+    <string name="xposed_description">X (Twitter) 评论区垃圾信息与广告过滤器</string>
+    
+    <!-- Dashboard Strings -->
+    <string name="status_module_active">模块已激活</string>
+    <string name="status_module_inactive">模块未激活（请在 LSPosed 中勾选并重启 X）</string>
+    <string name="switch_master_enable">启用过滤总开关</string>
+    <string name="switch_check_username">检测并过滤用户名</string>
+    <string name="switch_block_promoted">拦截推广推文与广告</string>
+    <string name="switch_block_special_chars">过滤花体字/火星文特殊字符</string>
+    <string name="switch_block_emoji">过滤纯 Emoji 或大量 Emoji 垃圾评论</string>
+    <string name="switch_block_grok">过滤包含 Grok 卡片的评论</string>
+    <string name="switch_cloud_sync">自动同步云端屏蔽词库</string>
+
+    <string name="btn_edit_user_keywords">自定义屏蔽词库</string>
+    <string name="btn_edit_whitelist">白名单管理</string>
+    <string name="btn_test_filter">测试匹配效果</string>
+    <string name="btn_sync_now">立即同步云端词库</string>
+    
+    <string name="stat_blocked_comments">已拦截评论/广告数</string>
+    <string name="stat_cloud_keywords">云端词库条数</string>
+    <string name="stat_user_keywords">自定义词库条数</string>
+    <string name="stat_last_sync">上次同步时间：%s</string>
+    <string name="never_synced">从未</string>
+    
+    <!-- Keyword Editor -->
+    <string name="keyword_editor_title">编辑词库</string>
+    <string name="keyword_editor_hint">每行一个屏蔽词或正则（如 /regex/i）</string>
+    <string name="btn_save">保存</string>
+    <string name="btn_import">导入</string>
+    <string name="btn_export">导出</string>
+    <string name="save_success">保存成功</string>
+    
+    <!-- Test Filter -->
+    <string name="test_filter_title">匹配测试</string>
+    <string name="test_input_hint">输入评论或推文内容测试过滤效果...</string>
+    <string name="test_username_hint">输入用户名（可选）</string>
+    <string name="btn_run_test">测试匹配</string>
+    <string name="test_result_pass">结果：【放行】未命中任何屏蔽规则</string>
+    <string name="test_result_block">结果：【拦截】命中规则：%s</string>
+</resources>
