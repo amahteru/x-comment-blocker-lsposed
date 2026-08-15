@@ -140,4 +140,118 @@ class GraphQLInterceptorTest {
         assertFalse(filteredJson.contains("tweet-1002-spam"))
         assertFalse(filteredJson.contains("promoted-tweet-2001"))
     }
+
+    @Test
+    fun testNoteTweetLongSpamFiltered() {
+        val json = """
+        {
+          "data": {
+            "threaded_conversation_with_injections_v2": {
+              "instructions": [
+                {
+                  "type": "TimelineAddEntries",
+                  "entries": [
+                    {
+                      "entryId": "tweet-long-spam",
+                      "content": {
+                        "itemContent": {
+                          "itemType": "TimelineTweet",
+                          "tweet_results": {
+                            "result": {
+                              "__typename": "Tweet",
+                              "legacy": {
+                                "full_text": "这是一个长推文前缀 https://t.co/abc"
+                              },
+                              "note_tweet": {
+                                "note_tweet_results": {
+                                  "result": {
+                                    "text": "万达广场附近寻找男大弟弟，提供各种无偿福利"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+        """.trimIndent()
+
+        val filtered = GraphQLInterceptor.filterJsonResponse(json, engine)
+        val root = JSONObject(filtered)
+        val entries = root.getJSONObject("data")
+            .getJSONObject("threaded_conversation_with_injections_v2")
+            .getJSONArray("instructions")
+            .getJSONObject(0)
+            .getJSONArray("entries")
+
+        assertEquals(0, entries.length())
+    }
+
+    @Test
+    fun testTimelineAddToModuleRepliesFiltered() {
+        val json = """
+        {
+          "data": {
+            "threaded_conversation_with_injections_v2": {
+              "instructions": [
+                {
+                  "type": "TimelineAddToModule",
+                  "moduleItems": [
+                    {
+                      "entryId": "module-reply-1",
+                      "item": {
+                        "itemContent": {
+                          "itemType": "TimelineTweet",
+                          "tweet_results": {
+                            "result": {
+                              "__typename": "Tweet",
+                              "legacy": {
+                                "full_text": "正常的回复内容"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "entryId": "module-reply-2-spam",
+                      "item": {
+                        "itemContent": {
+                          "itemType": "TimelineTweet",
+                          "tweet_results": {
+                            "result": {
+                              "__typename": "Tweet",
+                              "legacy": {
+                                "full_text": "同城约，点击主页查看"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+        """.trimIndent()
+
+        val filtered = GraphQLInterceptor.filterJsonResponse(json, engine)
+        val root = JSONObject(filtered)
+        val moduleItems = root.getJSONObject("data")
+            .getJSONObject("threaded_conversation_with_injections_v2")
+            .getJSONArray("instructions")
+            .getJSONObject(0)
+            .getJSONArray("moduleItems")
+
+        assertEquals(1, moduleItems.length())
+        assertEquals("module-reply-1", moduleItems.getJSONObject(0).getString("entryId"))
+    }
 }

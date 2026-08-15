@@ -10,10 +10,10 @@ object SpamCharCleaner {
         "[\\u200B-\\u200F\\uFEFF\\u00AD\\u2060-\\u206F\\u180E\\uFFF9-\\uFFFB]"
     )
 
-    // Matches mathematical alphanumeric, phonetic extensions, hieroglyphs, runes, etc.
-    // Commonly used by spam bots to bypass keyword detection
+    // Matches mathematical alphanumeric, phonetic extensions, enclosed alphanumerics, zalgo diacritics
+    // Commonly used by spam bots to bypass keyword detection (e.g. 𝑻𝒆𝒔𝒕, 𝕿𝖊𝖘𝖙, ᴛᴇsᴛ, ⓣⓔⓢⓣ, ｔｅｓｔ)
     private val SPAM_CHARS_REGEX: Pattern = Pattern.compile(
-        "[\\u02B0-\\u02FF\\u0F00-\\u0FFF\\u1D00-\\u1D7F\\u1D80-\\u1DBF\\u2070-\\u209F\\u2100-\\u2BFF\\uA980-\\uA9DF\\uAA00-\\uAADF\\x{13000}-\\x{1342F}\\x{1D400}-\\x{1D7FF}]"
+        "[\\u02B0-\\u02FF\\u0300-\\u036F\\u0F00-\\u0FFF\\u1D00-\\u1DBF\\u2070-\\u209F\\u2100-\\u214F\\u2460-\\u24FF\\uA980-\\uA9DF\\uAA00-\\uAADF\\uFF01-\\uFF5E\\x{13000}-\\x{1342F}\\x{1D400}-\\x{1D7FF}]"
     )
 
     // Matches standard Unicode Emojis

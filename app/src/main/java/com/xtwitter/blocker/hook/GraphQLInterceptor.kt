@@ -73,9 +73,11 @@ object GraphQLInterceptor {
             }
 
             // TimelineAddToModule (some replies/threads are in modules)
-            val moduleItems = instruction.optJSONObject("moduleItems")
+            val moduleItems = instruction.optJSONArray("moduleItems")
             if (moduleItems != null) {
-                // If needed
+                if (filterItemsArray(moduleItems, engine)) {
+                    modified = true
+                }
             }
         }
         return modified
@@ -184,7 +186,27 @@ object GraphQLInterceptor {
         }
 
         val legacy = result.optJSONObject("legacy")
-        val fullText = legacy?.optString("full_text", "") ?: ""
+        var fullText = legacy?.optString("full_text", "") ?: ""
+
+        // Long tweet / Note tweet support (X Premium / >280 characters)
+        val noteTweet = result.optJSONObject("note_tweet")
+            ?.optJSONObject("note_tweet_results")
+            ?.optJSONObject("result")
+        val noteText = noteTweet?.optString("text", "") ?: ""
+        if (noteText.isNotEmpty()) {
+            fullText = if (fullText.isEmpty()) noteText else "$fullText $noteText"
+        }
+
+        // Quoted tweet support
+        val quotedResult = result.optJSONObject("quoted_status_result")?.optJSONObject("result")
+        var quotedTweet = quotedResult
+        if (quotedTweet != null && quotedTweet.optString("__typename") == "TweetWithVisibilityResults") {
+            quotedTweet = quotedTweet.optJSONObject("tweet") ?: quotedTweet
+        }
+        val quotedText = quotedTweet?.optJSONObject("legacy")?.optString("full_text", "") ?: ""
+        if (quotedText.isNotEmpty()) {
+            fullText = if (fullText.isEmpty()) quotedText else "$fullText $quotedText"
+        }
 
         // User info
         val core = result.optJSONObject("core")
@@ -193,8 +215,14 @@ object GraphQLInterceptor {
             userResult = userResult.optJSONObject("user") ?: userResult
         }
         val userLegacy = userResult?.optJSONObject("legacy")
-        val screenName = userLegacy?.optString("screen_name", "") ?: ""
-        val name = userLegacy?.optString("name", "") ?: ""
+        var screenName = userLegacy?.optString("screen_name", "") ?: ""
+        if (screenName.isEmpty()) {
+            screenName = userResult?.optJSONObject("core")?.optString("screen_name", "") ?: ""
+        }
+        var name = userLegacy?.optString("name", "") ?: ""
+        if (name.isEmpty()) {
+            name = userResult?.optJSONObject("core")?.optString("name", "") ?: ""
+        }
 
         // Grok card check
         var hasGrokCard = false
