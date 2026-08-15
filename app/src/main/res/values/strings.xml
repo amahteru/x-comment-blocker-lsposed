@@ -22,9 +22,9 @@
     <string name="switch_master_enable">启用过滤总开关</string>
     <string name="switch_check_username">检测并过滤用户名</string>
     <string name="switch_block_promoted">拦截推广推文与广告</string>
-    <string name="switch_block_special_chars">过滤花体字/火星文特殊字符</string>
-    <string name="switch_block_emoji">过滤纯 Emoji 或大量 Emoji 垃圾评论</string>
-    <string name="switch_block_grok">过滤包含 Grok 卡片的评论</string>
+    <string name="switch_block_special_chars">屏蔽带特殊字符的评论</string>
+    <string name="switch_block_emoji">屏蔽带 emoji 的评论</string>
+    <string name="switch_block_grok">屏蔽带 Grok 卡片的评论</string>
     <string name="switch_cloud_sync">自动同步云端屏蔽词库</string>
 
     <!-- Rules Strings -->
