@@ -61,6 +61,7 @@ class MainActivity : AppCompatActivity() {
 
         // Disable swipe if desired, or keep smooth switching
         binding.viewPager.isUserInputEnabled = false
+        binding.viewPager.offscreenPageLimit = 2
 
         binding.bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
