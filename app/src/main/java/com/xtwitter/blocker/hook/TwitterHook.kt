@@ -30,6 +30,12 @@ object TwitterHook {
         val classLoader = lpparam.classLoader
 
         try {
+            configManager.loadToEngine(SpamFilterEngine.instance)
+            lastConfigLoadTime = System.currentTimeMillis()
+            XposedBridge.log("[$TAG] Synchronous initHook config loaded: hasKeywords=${SpamFilterEngine.instance.hasKeywords()}")
+        } catch (_: Throwable) {}
+
+        try {
             XposedHelpers.findAndHookMethod(
                 Application::class.java,
                 "onCreate",
@@ -39,16 +45,27 @@ object TwitterHook {
                         appContext = app
                         XposedBridge.log("[$TAG] Target Application initialized: ${app.packageName}")
 
+                        // Synchronously load config via ContentProvider right in onCreate
+                        try {
+                            ConfigManager.loadFromContentProvider(app, SpamFilterEngine.instance)
+                            lastConfigLoadTime = System.currentTimeMillis()
+                            XposedBridge.log("[$TAG] App onCreate ContentProvider config loaded: isEnabled=${SpamFilterEngine.instance.isEnabled}, hasKeywords=${SpamFilterEngine.instance.hasKeywords()}")
+                        } catch (t: Throwable) {
+                            XposedBridge.log("[$TAG] Error loading config from ContentProvider in onCreate: ${t.message}")
+                        }
+
                         val appClassLoader = app.classLoader
                         hookOkHttpSafe(appClassLoader)
 
                         backgroundExecutor.execute {
-                            try {
-                                configManager.loadToEngine(SpamFilterEngine.instance)
-                                lastConfigLoadTime = System.currentTimeMillis()
-                                XposedBridge.log("[$TAG] Initial config loaded: isEnabled=${SpamFilterEngine.instance.isEnabled}, hasKeywords=${SpamFilterEngine.instance.hasKeywords()}")
-                            } catch (e: Throwable) {
-                                XposedBridge.log("[$TAG] Error loading config: ${e.message}")
+                            if (!SpamFilterEngine.instance.hasKeywords()) {
+                                try {
+                                    configManager.loadToEngine(SpamFilterEngine.instance)
+                                    lastConfigLoadTime = System.currentTimeMillis()
+                                    XposedBridge.log("[$TAG] Background config loaded: isEnabled=${SpamFilterEngine.instance.isEnabled}, hasKeywords=${SpamFilterEngine.instance.hasKeywords()}")
+                                } catch (e: Throwable) {
+                                    XposedBridge.log("[$TAG] Error loading background config: ${e.message}")
+                                }
                             }
 
                             // Always also request via Ordered Broadcast for reliable cross-process sync
@@ -182,20 +199,36 @@ object TwitterHook {
             return XposedHelpers.callMethod(responseBuilder, "build")
         }
 
-        // Throttled background reload to avoid blocking network filtering while keeping rules updated
+        // Ensure engine is loaded with keywords
         val now = System.currentTimeMillis()
-        if (now - lastConfigLoadTime > CONFIG_RELOAD_INTERVAL_MS) {
+        if (!SpamFilterEngine.instance.hasKeywords()) {
+            try {
+                if (appContext != null) {
+                    ConfigManager.loadFromContentProvider(appContext!!, SpamFilterEngine.instance)
+                }
+                if (!SpamFilterEngine.instance.hasKeywords()) {
+                    configManager.loadToEngine(SpamFilterEngine.instance)
+                }
+                lastConfigLoadTime = now
+            } catch (_: Throwable) {}
+        } else if (now - lastConfigLoadTime > CONFIG_RELOAD_INTERVAL_MS) {
             lastConfigLoadTime = now
             backgroundExecutor.execute {
                 try {
-                    configManager.loadToEngine(SpamFilterEngine.instance)
+                    if (appContext != null && !ConfigManager.loadFromContentProvider(appContext!!, SpamFilterEngine.instance)) {
+                        configManager.loadToEngine(SpamFilterEngine.instance)
+                    }
                 } catch (_: Throwable) {}
             }
         }
 
+
         val previousBlockedCount = GraphQLInterceptor.blockedCount.get()
-        val filteredJson = GraphQLInterceptor.filterJsonResponse(jsonString, SpamFilterEngine.instance, url)
+        val engine = SpamFilterEngine.instance
+        android.util.Log.i(TAG, "safeFilter checking: url=$url, hasKeywords=${engine.hasKeywords()}, isEnabled=${engine.isEnabled}")
+        val filteredJson = GraphQLInterceptor.filterJsonResponse(jsonString, engine, url)
         val delta = GraphQLInterceptor.blockedCount.get() - previousBlockedCount
+        android.util.Log.i(TAG, "safeFilter result: delta=$delta, modified=${filteredJson != jsonString}")
 
         if (filteredJson != jsonString) {
             android.util.Log.i(TAG, "OkHttp filtered JSON successfully for $url! blockedCount delta: $delta")
@@ -218,23 +251,22 @@ object TwitterHook {
     }
 
     private fun isIgnoredEndpoint(url: String): Boolean {
-        val lower = url.lowercase()
-        return lower.contains("typeahead") ||
-                lower.contains("search_box") ||
-                lower.contains("search_features") ||
-                lower.contains("suggestions") ||
-                lower.contains("/guide") ||
-                lower.contains("settings") ||
-                lower.contains("feature_switch") ||
-                lower.contains("notifications") ||
-                lower.contains("/dm/") ||
-                lower.contains("direct_messages") ||
-                lower.contains("badge") ||
-                lower.contains("auth") ||
-                lower.contains("login") ||
-                lower.contains("live_pipeline") ||
-                lower.contains("media/upload") ||
-                lower.contains("/jot/")
+        val path = url.substringBefore('?').lowercase()
+        return path.contains("typeahead") ||
+                path.contains("search_box") ||
+                path.contains("suggestions") ||
+                path.contains("/guide") ||
+                path.contains("settings") ||
+                path.contains("feature_switch") ||
+                path.contains("notifications") ||
+                path.contains("/dm/") ||
+                path.contains("direct_messages") ||
+                path.contains("badge") ||
+                path.contains("auth") ||
+                path.contains("login") ||
+                path.contains("live_pipeline") ||
+                path.contains("media/upload") ||
+                path.contains("/jot/")
     }
 
     private fun isPotentialTimelineJson(json: String): Boolean {

@@ -75,7 +75,8 @@ object GraphQLInterceptor {
             }
 
             if (modified) root.toString() else json
-        } catch (_: Throwable) {
+        } catch (t: Throwable) {
+            android.util.Log.e("XCommentBlocker-Hook", "filterJsonResponse error: ${t.message}", t)
             json
         }
     }
@@ -92,12 +93,18 @@ object GraphQLInterceptor {
         var opAuthorUserId: String? = null
 
         if (isConversationTimeline) {
-            // Find OP (thread author) from the first tweet entry
+            // Find OP (thread author) from the focal tweet entry ONLY (never from reply conversationthread- entries)
             searchOp@ for (i in 0 until instructions.length()) {
                 val instr = instructions.optJSONObject(i) ?: continue
                 val entries = instr.optJSONArray("entries") ?: continue
                 for (j in 0 until entries.length()) {
                     val entry = entries.optJSONObject(j) ?: continue
+                    val entryId = entry.optString("entryId", "").ifEmpty {
+                        entry.optString("entry_id", "")
+                    }
+                    if (!entryId.startsWith("tweet-") && !entryId.startsWith("tweet_")) {
+                        continue
+                    }
                     val content = extractItemContent(entry.optJSONObject("content") ?: entry)
                     if (content != null) {
                         val (sn, uid) = extractAuthorInfo(content)
@@ -105,22 +112,6 @@ object GraphQLInterceptor {
                             opAuthorScreenName = sn
                             opAuthorUserId = uid
                             break@searchOp
-                        }
-                    }
-                    val items = (entry.optJSONObject("content") ?: entry).optJSONArray("items")
-                        ?: (entry.optJSONObject("content") ?: entry).optJSONArray("moduleItems")
-                    if (items != null && items.length() > 0) {
-                        for (k in 0 until items.length()) {
-                            val itObj = items.optJSONObject(k) ?: continue
-                            val itContent = extractItemContent(itObj)
-                            if (itContent != null) {
-                                val (sn, uid) = extractAuthorInfo(itContent)
-                                if (!sn.isNullOrEmpty() || !uid.isNullOrEmpty()) {
-                                    opAuthorScreenName = sn
-                                    opAuthorUserId = uid
-                                    break@searchOp
-                                }
-                            }
                         }
                     }
                 }

@@ -201,6 +201,28 @@ class ConfigManager private constructor(private val isXposedMode: Boolean) {
         fun forXposed(): ConfigManager = ConfigManager(isXposedMode = true)
 
         /**
+         * Loads configuration synchronously via ContentProvider call.
+         */
+        fun loadFromContentProvider(context: Context, engine: SpamFilterEngine = SpamFilterEngine.instance): Boolean {
+            return try {
+                val uri = android.net.Uri.parse("content://${PrefsConstants.AUTHORITY}")
+                val bundle = context.contentResolver.call(uri, PrefsConstants.METHOD_GET_CONFIG, null, null)
+                if (bundle != null && (bundle.containsKey(PrefsConstants.KEY_ENABLED) || bundle.containsKey(PrefsConstants.KEY_CLOUD_KEYWORDS))) {
+                    applyBundleToEngine(bundle, engine)
+                    XposedBridge.log("[$TAG] Successfully loaded config via ContentProvider: hasKeywords=${engine.hasKeywords()}")
+                    android.util.Log.i(TAG, "Successfully loaded config via ContentProvider: hasKeywords=${engine.hasKeywords()}")
+                    true
+                } else {
+                    false
+                }
+            } catch (t: Throwable) {
+                XposedBridge.log("[$TAG] ContentProvider load error: ${t.message}")
+                android.util.Log.e(TAG, "ContentProvider load error: ${t.message}")
+                false
+            }
+        }
+
+        /**
          * Applies a Bundle received from IPC / Broadcast directly to the SpamFilterEngine.
          */
         fun applyBundleToEngine(bundle: android.os.Bundle, engine: SpamFilterEngine = SpamFilterEngine.instance) {
