@@ -26,7 +26,6 @@ class TestFilterActivity : AppCompatActivity() {
 
         binding.toolbar.setNavigationOnClickListener { finish() }
 
-        // Make sure engine is refreshed with latest preferences
         ConfigManager.fromContext(this).loadToEngine(SpamFilterEngine.instance, this)
 
         binding.btnRunTest.setOnClickListener {

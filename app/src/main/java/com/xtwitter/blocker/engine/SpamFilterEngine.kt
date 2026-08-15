@@ -73,22 +73,18 @@ class SpamFilterEngine {
     ): FilterResult {
         if (!isEnabled) return FilterResult.Pass
 
-        // 1. Promoted / Ads
         if (isPromoted && isBlockPromoted) {
             return FilterResult.Blocked(FilterResult.BlockReason.PROMOTED_AD)
         }
 
-        // 2. Whitelist Check
         if (isWhitelisted(screenName)) {
             return FilterResult.Pass
         }
 
-        // 3. Grok card check
         if (hasGrokCard && isBlockGrok) {
             return FilterResult.Blocked(FilterResult.BlockReason.GROK_CARD)
         }
 
-        // 4. Special Characters / Obfuscation Check
         if (isBlockSpecialChars) {
             if (SpamCharCleaner.containsSpamChars(fullText) ||
                 (isCheckUsername && SpamCharCleaner.containsSpamChars(name))
@@ -97,14 +93,12 @@ class SpamFilterEngine {
             }
         }
 
-        // 5. Emoji spam check
         if (isBlockEmoji && !fullText.isNullOrEmpty()) {
             if (SpamCharCleaner.containsEmoji(fullText)) {
                 return FilterResult.Blocked(FilterResult.BlockReason.EMOJI_SPAM)
             }
         }
 
-        // 6. Username / Display name keywords check
         if (isCheckUsername) {
             if (matchesKeywords(name)) {
                 return FilterResult.Blocked(FilterResult.BlockReason.USERNAME_MATCH, name)
@@ -114,7 +108,6 @@ class SpamFilterEngine {
             }
         }
 
-        // 7. Full text keywords check
         if (matchesKeywords(fullText)) {
             return FilterResult.Blocked(FilterResult.BlockReason.KEYWORD_MATCH)
         }

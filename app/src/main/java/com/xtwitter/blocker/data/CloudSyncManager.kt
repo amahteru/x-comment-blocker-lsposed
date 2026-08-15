@@ -18,7 +18,6 @@ object CloudSyncManager {
         try {
             var content: String? = null
 
-            // Try GitHub raw first
             try {
                 val request = Request.Builder()
                     .url(PrefsConstants.CLOUD_KEYWORDS_URL)
@@ -31,7 +30,6 @@ object CloudSyncManager {
                 }
             } catch (_: Exception) {}
 
-            // Fallback to jsDelivr CDN
             if (content.isNullOrEmpty()) {
                 val request = Request.Builder()
                     .url("${PrefsConstants.CLOUD_KEYWORDS_CDN_URL}?t=${System.currentTimeMillis()}")

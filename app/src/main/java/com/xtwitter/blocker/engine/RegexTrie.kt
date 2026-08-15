@@ -47,7 +47,6 @@ class RegexTrie {
             }
             if (seen.isEmpty()) return null
 
-            // Sort by length ascending
             val sorted = seen.sortedBy { it.length }
 
             // Pruning: if kw already contains an existing shorter keyword as substring, kw is redundant
@@ -58,7 +57,6 @@ class RegexTrie {
                 }
             }
 
-            // Build Trie
             val root = TrieNode()
             for (kw in pruned) {
                 var node = root
@@ -94,7 +92,6 @@ class RegexTrie {
                 val cleaned = SpamCharCleaner.removeInvisibleChars(line).trim()
                 if (cleaned.isEmpty()) continue
 
-                // Check if it is a custom regex line like /foo/i or /foo/
                 if (cleaned.length >= 3 && cleaned.startsWith("/")) {
                     val lastSlash = cleaned.lastIndexOf('/')
                     if (lastSlash > 0) {

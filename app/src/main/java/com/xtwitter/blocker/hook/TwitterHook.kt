@@ -114,7 +114,6 @@ object TwitterHook {
 
         val response = XposedHelpers.callMethod(chain, "proceed", request)
 
-        // Only inspect GraphQL requests or timeline API responses
         if (!url.contains("/graphql/") && !url.contains("/1.1/timeline/")) {
             return response
         }
@@ -123,7 +122,6 @@ object TwitterHook {
         val contentType = XposedHelpers.callMethod(body, "contentType")
         val mediaTypeString = contentType?.toString() ?: ""
 
-        // Must be JSON or tweet conversation endpoint
         if (!mediaTypeString.contains("json") && !url.contains("TweetDetail") && !url.contains("ThreadedConversation")) {
             return response
         }
@@ -131,7 +129,6 @@ object TwitterHook {
         return try {
             checkAndReloadConfigThrottled()
 
-            // Read raw bytes from ResponseBody
             val stream = XposedHelpers.callMethod(body, "byteStream") as? InputStream
             val rawBytes = stream?.readBytes()
                 ?: (XposedHelpers.callMethod(body, "bytes") as? ByteArray)

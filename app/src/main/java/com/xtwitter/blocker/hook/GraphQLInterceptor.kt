@@ -64,7 +64,6 @@ object GraphQLInterceptor {
         for (i in 0 until instructions.length()) {
             val instruction = instructions.optJSONObject(i) ?: continue
 
-            // TimelineAddEntries
             val entries = instruction.optJSONArray("entries")
             if (entries != null) {
                 if (filterEntriesArray(entries, engine)) {
@@ -72,7 +71,6 @@ object GraphQLInterceptor {
                 }
             }
 
-            // TimelineAddToModule (some replies/threads are in modules)
             val moduleItems = instruction.optJSONArray("moduleItems")
             if (moduleItems != null) {
                 if (filterItemsArray(moduleItems, engine)) {
@@ -94,7 +92,6 @@ object GraphQLInterceptor {
             val entry = entries.optJSONObject(i) ?: continue
             val entryId = entry.optString("entryId", "")
 
-            // Check if entire entry is promoted
             if (entryId.startsWith("promoted-") || entryId.startsWith("promotedTweet-")) {
                 if (engine.isBlockPromoted) {
                     toRemoveIndices.add(i)
@@ -106,7 +103,6 @@ object GraphQLInterceptor {
 
             val content = entry.optJSONObject("content") ?: continue
 
-            // Case A: content is a single Item
             val itemContent = content.optJSONObject("itemContent")
             if (itemContent != null) {
                 if (shouldFilterItemContent(itemContent, engine)) {
@@ -117,7 +113,6 @@ object GraphQLInterceptor {
                 }
             }
 
-            // Case B: content has items (threaded conversation list)
             val items = content.optJSONArray("items")
             if (items != null) {
                 if (filterItemsArray(items, engine)) {
@@ -130,7 +125,6 @@ object GraphQLInterceptor {
             }
         }
 
-        // Remove from highest index to lowest
         for (idx in toRemoveIndices.asReversed()) {
             entries.remove(idx)
         }
@@ -168,11 +162,9 @@ object GraphQLInterceptor {
         itemContent: JSONObject,
         engine: SpamFilterEngine
     ): Boolean {
-        // 1. Promoted check
         val promotedMetadata = itemContent.optJSONObject("promotedMetadata")
         val isPromoted = promotedMetadata != null
 
-        // 2. Tweet Results
         val tweetResults = itemContent.optJSONObject("tweet_results")
         var result = tweetResults?.optJSONObject("result")
 
@@ -208,7 +200,6 @@ object GraphQLInterceptor {
             fullText = if (fullText.isEmpty()) quotedText else "$fullText $quotedText"
         }
 
-        // User info
         val core = result.optJSONObject("core")
         var userResult = core?.optJSONObject("user_results")?.optJSONObject("result")
         if (userResult != null && userResult.optString("__typename") == "UserWithVisibilityResults") {
@@ -224,7 +215,6 @@ object GraphQLInterceptor {
             name = userResult?.optJSONObject("core")?.optString("name", "") ?: ""
         }
 
-        // Grok card check
         var hasGrokCard = false
         val card = result.optJSONObject("card")
         if (card != null) {
