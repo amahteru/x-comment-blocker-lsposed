@@ -110,7 +110,7 @@
                                 android:layout_marginStart="8dp"
                                 android:layout_weight="1"
                                 android:gravity="end"
-                                android:text="上次同步：从未"
+                                android:text="上次同步时间：\n（暂无同步记录）&#12288;"
                                 android:textAppearance="?attr/textAppearanceBodySmall"
                                 android:textColor="?attr/colorOnSurfaceVariant" />
                         </LinearLayout>

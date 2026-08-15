@@ -29,7 +29,7 @@
 
     <!-- Rules Strings -->
     <string name="card_title_cloud_keywords">云端屏蔽词库</string>
-    <string name="card_desc_cloud_keywords">由社区维护的高频垃圾评论及博彩推广特征词</string>
+    <string name="card_desc_cloud_keywords">由社区维护的高频垃圾评论及推广特征词</string>
     <string name="card_title_user_keywords">自定义屏蔽词库</string>
     <string name="card_desc_user_keywords">添加您自定义的屏蔽关键词或正则表达式</string>
     <string name="card_title_whitelist">白名单用户管理</string>
@@ -43,8 +43,8 @@
     <string name="stat_cloud_keywords">云端词库</string>
     <string name="stat_user_keywords">自定义词</string>
     <string name="stat_whitelist_count">白名单</string>
-    <string name="stat_last_sync">上次同步时间：%s</string>
-    <string name="never_synced">从未</string>
+    <string name="stat_last_sync">上次同步时间：\n%s</string>
+    <string name="never_synced">（暂无同步记录）&#12288;</string>
     
     <!-- Settings & About Strings -->
     <string name="settings_section_lsposed">LSPosed 状态与配置</string>
