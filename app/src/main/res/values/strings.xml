@@ -3,8 +3,12 @@
     <string name="xposed_description">X (Twitter) 评论区垃圾信息与广告过滤器</string>
     
     <!-- Dashboard Strings -->
-    <string name="status_module_active">模块已激活</string>
-    <string name="status_module_inactive">模块未激活（请在 LSPosed 中勾选并重启 X）</string>
+    <string name="status_module_active">模块生效中</string>
+    <string name="status_module_inactive">模块未激活</string>
+    <string name="status_module_paused">拦截已暂停</string>
+    <string name="status_desc_inactive">未检测到 LSPosed 框架注入，请在 LSPosed 中勾选本应用与 X (Twitter) 并重启</string>
+    <string name="status_desc_active">LSPosed 注入正常，评论过滤保护运行中</string>
+    <string name="status_desc_paused">LSPosed 注入正常，已在应用内暂停过滤</string>
     <string name="switch_master_enable">启用过滤总开关</string>
     <string name="switch_check_username">检测并过滤用户名</string>
     <string name="switch_block_promoted">拦截推广推文与广告</string>

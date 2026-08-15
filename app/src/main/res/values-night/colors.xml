@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- MD3 Dark Theme Tokens -->
+    <color name="primary">#8FCDFF</color>
+    <color name="on_primary">#00344F</color>
+    <color name="primary_container">#004B71</color>
+    <color name="on_primary_container">#CBE6FF</color>
+
+    <color name="secondary">#B7C9D9</color>
+    <color name="on_secondary">#22323F</color>
+    <color name="secondary_container">#394956</color>
+    <color name="on_secondary_container">#D3E5F5</color>
+
+    <color name="surface">#101417</color>
+    <color name="on_surface">#DFE3E7</color>
+    <color name="surface_variant">#42474E</color>
+    <color name="on_surface_variant">#C2C7CF</color>
+
+    <color name="surface_container_lowest">#0B0E12</color>
+    <color name="surface_container_low">#181C20</color>
+    <color name="surface_container">#1C2024</color>
+    <color name="surface_container_high">#272A2E</color>
+    <color name="surface_container_highest">#313539</color>
+
+    <color name="outline">#8C9199</color>
+    <color name="outline_variant">#42474E</color>
+
+    <!-- Status Indicators -->
+    <color name="status_green">#34D399</color>
+    <color name="status_red">#F87171</color>
+    <color name="status_yellow">#FBBF24</color>
+</resources>

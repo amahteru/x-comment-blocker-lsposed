@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/surface"
+    android:background="?attr/colorSurface"
     android:orientation="vertical">
 
     <com.google.android.material.appbar.MaterialToolbar
@@ -11,8 +11,10 @@
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
         app:navigationIcon="?attr/homeAsUpIndicator"
+        app:navigationIconTint="?attr/colorOnSurface"
         app:title="@string/keyword_editor_title"
-        app:titleTextColor="@color/on_surface" />
+        app:titleTextAppearance="?attr/textAppearanceTitleLarge"
+        app:titleTextColor="?attr/colorOnSurface" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -27,20 +29,20 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="8dp"
             android:text="共 0 条规则"
-            android:textColor="@color/on_surface_variant"
-            android:textSize="14sp" />
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurfaceVariant" />
 
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
             android:hint="@string/keyword_editor_hint"
-            app:boxBackgroundColor="@color/card_background"
-            app:boxCornerRadiusBottomEnd="12dp"
-            app:boxCornerRadiusBottomStart="12dp"
-            app:boxCornerRadiusTopEnd="12dp"
-            app:boxCornerRadiusTopStart="12dp"
-            app:boxStrokeColor="@color/primary">
+            app:boxBackgroundColor="?attr/colorSurfaceContainerLow"
+            app:boxCornerRadiusBottomEnd="16dp"
+            app:boxCornerRadiusBottomStart="16dp"
+            app:boxCornerRadiusTopEnd="16dp"
+            app:boxCornerRadiusTopStart="16dp"
+            app:boxStrokeColor="?attr/colorPrimary">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/etKeywords"
@@ -48,14 +50,16 @@
                 android:layout_height="match_parent"
                 android:gravity="top|start"
                 android:inputType="textMultiLine"
-                android:textSize="14sp" />
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:textColor="?attr/colorOnSurface" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSave"
+            style="@style/Widget.Material3.Button"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="16dp"
             android:text="@string/btn_save" />
 
     </LinearLayout>

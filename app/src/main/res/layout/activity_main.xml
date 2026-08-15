@@ -3,19 +3,21 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/surface">
+    android:background="?attr/colorSurface">
 
     <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/surface">
+        android:background="?attr/colorSurface"
+        app:elevation="0dp">
 
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             app:title="@string/app_name"
-            app:titleTextColor="@color/on_surface" />
+            app:titleTextAppearance="?attr/textAppearanceTitleLarge"
+            app:titleTextColor="?attr/colorOnSurface" />
     </com.google.android.material.appbar.AppBarLayout>
 
     <androidx.core.widget.NestedScrollView
@@ -27,18 +29,19 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:paddingHorizontal="16dp"
+            android:paddingBottom="24dp">
 
             <!-- Status Card -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardStatus"
+                style="?attr/materialCardViewFilledStyle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
-                app:cardBackgroundColor="@color/card_background"
-                app:cardCornerRadius="16dp"
-                app:cardElevation="2dp"
-                app:strokeColor="@color/outline"
-                app:strokeWidth="1dp">
+                app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
+                app:cardCornerRadius="20dp"
+                app:strokeWidth="0dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -56,18 +59,17 @@
                             android:id="@+id/ivStatusDot"
                             android:layout_width="12dp"
                             android:layout_height="12dp"
-                            android:background="@drawable/circle_green" />
+                            android:background="@drawable/circle_red" />
 
                         <TextView
                             android:id="@+id/tvStatusTitle"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
+                            android:layout_marginStart="10dp"
                             android:layout_weight="1"
-                            android:text="@string/status_module_active"
-                            android:textColor="@color/on_surface"
-                            android:textSize="16sp"
-                            android:textStyle="bold" />
+                            android:text="@string/status_module_inactive"
+                            android:textAppearance="?attr/textAppearanceTitleMedium"
+                            android:textColor="?attr/colorOnSurface" />
 
                         <com.google.android.material.materialswitch.MaterialSwitch
                             android:id="@+id/switchMaster"
@@ -75,11 +77,20 @@
                             android:layout_height="wrap_content" />
                     </LinearLayout>
 
+                    <TextView
+                        android:id="@+id/tvStatusSubtitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/status_desc_inactive"
+                        android:textAppearance="?attr/textAppearanceBodySmall"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+
                     <View
                         android:layout_width="match_parent"
                         android:layout_height="1dp"
                         android:layout_marginVertical="12dp"
-                        android:background="@color/surface_variant" />
+                        android:background="?attr/colorOutlineVariant" />
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -99,16 +110,17 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="0"
-                                android:textColor="@color/primary"
-                                android:textSize="22sp"
+                                android:textAppearance="?attr/textAppearanceHeadlineSmall"
+                                android:textColor="?attr/colorPrimary"
                                 android:textStyle="bold" />
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
                                 android:text="已拦截"
-                                android:textColor="@color/on_surface_variant"
-                                android:textSize="12sp" />
+                                android:textAppearance="?attr/textAppearanceLabelMedium"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
                         </LinearLayout>
 
                         <LinearLayout
@@ -123,16 +135,17 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="0"
-                                android:textColor="@color/on_surface"
-                                android:textSize="22sp"
+                                android:textAppearance="?attr/textAppearanceHeadlineSmall"
+                                android:textColor="?attr/colorOnSurface"
                                 android:textStyle="bold" />
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
                                 android:text="云端词库"
-                                android:textColor="@color/on_surface_variant"
-                                android:textSize="12sp" />
+                                android:textAppearance="?attr/textAppearanceLabelMedium"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
                         </LinearLayout>
 
                         <LinearLayout
@@ -147,16 +160,17 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="0"
-                                android:textColor="@color/on_surface"
-                                android:textSize="22sp"
+                                android:textAppearance="?attr/textAppearanceHeadlineSmall"
+                                android:textColor="?attr/colorOnSurface"
                                 android:textStyle="bold" />
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
                                 android:text="自定义词"
-                                android:textColor="@color/on_surface_variant"
-                                android:textSize="12sp" />
+                                android:textAppearance="?attr/textAppearanceLabelMedium"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
                         </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
@@ -164,14 +178,13 @@
 
             <!-- Toggles Card -->
             <com.google.android.material.card.MaterialCardView
+                style="?attr/materialCardViewFilledStyle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
-                app:cardBackgroundColor="@color/card_background"
-                app:cardCornerRadius="16dp"
-                app:cardElevation="2dp"
-                app:strokeColor="@color/outline"
-                app:strokeWidth="1dp">
+                app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
+                app:cardCornerRadius="20dp"
+                app:strokeWidth="0dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -184,52 +197,56 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/switch_block_promoted"
-                        android:textColor="@color/on_surface" />
+                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        android:textColor="?attr/colorOnSurface" />
 
                     <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/switchCheckUsername"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
+                        android:layout_marginTop="10dp"
                         android:text="@string/switch_check_username"
-                        android:textColor="@color/on_surface" />
+                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        android:textColor="?attr/colorOnSurface" />
 
                     <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/switchBlockSpecialChars"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
+                        android:layout_marginTop="10dp"
                         android:text="@string/switch_block_special_chars"
-                        android:textColor="@color/on_surface" />
+                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        android:textColor="?attr/colorOnSurface" />
 
                     <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/switchBlockEmoji"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
+                        android:layout_marginTop="10dp"
                         android:text="@string/switch_block_emoji"
-                        android:textColor="@color/on_surface" />
+                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        android:textColor="?attr/colorOnSurface" />
 
                     <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/switchBlockGrok"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
+                        android:layout_marginTop="10dp"
                         android:text="@string/switch_block_grok"
-                        android:textColor="@color/on_surface" />
+                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        android:textColor="?attr/colorOnSurface" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
             <!-- Actions Card -->
             <com.google.android.material.card.MaterialCardView
+                style="?attr/materialCardViewFilledStyle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
-                app:cardBackgroundColor="@color/card_background"
-                app:cardCornerRadius="16dp"
-                app:cardElevation="2dp"
-                app:strokeColor="@color/outline"
-                app:strokeWidth="1dp">
+                app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
+                app:cardCornerRadius="20dp"
+                app:strokeWidth="0dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -262,6 +279,7 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnSyncCloud"
+                        style="@style/Widget.Material3.Button"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
@@ -272,10 +290,10 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_gravity="center_horizontal"
-                        android:layout_marginTop="8dp"
+                        android:layout_marginTop="10dp"
                         android:text="上次同步时间：从未"
-                        android:textColor="@color/on_surface_variant"
-                        android:textSize="12sp" />
+                        android:textAppearance="?attr/textAppearanceLabelMedium"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

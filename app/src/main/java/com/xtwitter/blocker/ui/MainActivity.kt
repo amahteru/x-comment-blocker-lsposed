@@ -13,6 +13,8 @@ import com.xtwitter.blocker.data.ConfigManager
 import com.xtwitter.blocker.data.PrefsConstants
 import com.xtwitter.blocker.databinding.ActivityMainBinding
 import com.xtwitter.blocker.engine.SpamFilterEngine
+import com.xtwitter.blocker.hook.ModuleState
+import com.xtwitter.blocker.hook.ModuleStatus
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -38,6 +40,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateStats()
+        updateStatusCard(binding.switchMaster.isChecked)
         ConfigManager.fromContext(this).loadToEngine(SpamFilterEngine.instance, this)
     }
 
@@ -119,12 +122,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateStatusCard(isEnabled: Boolean) {
-        if (isEnabled) {
-            binding.ivStatusDot.setBackgroundResource(R.drawable.circle_green)
-            binding.tvStatusTitle.setText(R.string.status_module_active)
-        } else {
-            binding.ivStatusDot.setBackgroundResource(R.drawable.circle_red)
-            binding.tvStatusTitle.text = "拦截功能已暂停"
+        val isHookActive = ModuleStatus.isModuleActive()
+        val state = ModuleStatus.resolveModuleState(isHookActive = isHookActive, isMasterEnabled = isEnabled)
+
+        when (state) {
+            ModuleState.NOT_ACTIVATED -> {
+                binding.ivStatusDot.setBackgroundResource(R.drawable.circle_red)
+                binding.tvStatusTitle.setText(R.string.status_module_inactive)
+                binding.tvStatusSubtitle.setText(R.string.status_desc_inactive)
+            }
+            ModuleState.ACTIVE_ENABLED -> {
+                binding.ivStatusDot.setBackgroundResource(R.drawable.circle_green)
+                binding.tvStatusTitle.setText(R.string.status_module_active)
+                binding.tvStatusSubtitle.setText(R.string.status_desc_active)
+            }
+            ModuleState.ACTIVE_PAUSED -> {
+                binding.ivStatusDot.setBackgroundResource(R.drawable.circle_yellow)
+                binding.tvStatusTitle.setText(R.string.status_module_paused)
+                binding.tvStatusSubtitle.setText(R.string.status_desc_paused)
+            }
         }
     }
 

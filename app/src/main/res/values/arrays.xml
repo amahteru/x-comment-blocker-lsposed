@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string-array name="xposed_scope">
+        <item>com.xtwitter.blocker</item>
         <item>com.twitter.android</item>
         <item>com.twitter.android.alpha</item>
         <item>com.twitter.android.beta</item>
