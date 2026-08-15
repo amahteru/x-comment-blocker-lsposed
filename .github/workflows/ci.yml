@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   build-and-unit-test:
-    name: 🛠️ Unit Tests & Build APK
+    name: Unit Tests & Build APK
     runs-on: ubuntu-latest
 
     steps:
@@ -61,7 +61,7 @@ jobs:
           retention-days: 7
 
   e2e-lspatch-emulation-test:
-    name: 📱 E2E Real Emulation Test (LSPatch + AVD)
+    name: E2E Real Emulation Test (LSPatch + AVD)
     needs: build-and-unit-test
     runs-on: ubuntu-latest
     timeout-minutes: 25
