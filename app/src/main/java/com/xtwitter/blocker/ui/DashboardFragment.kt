@@ -24,6 +24,14 @@ class DashboardFragment : Fragment() {
     private val binding get() = _binding!!
     private lateinit var prefs: SharedPreferences
 
+    private val prefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == PrefsConstants.KEY_BLOCKED_COUNT || key == PrefsConstants.KEY_CLOUD_KEYWORDS || key == PrefsConstants.KEY_USER_KEYWORDS) {
+            activity?.runOnUiThread {
+                updateStats()
+            }
+        }
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -36,6 +44,7 @@ class DashboardFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         prefs = requireContext().getSharedPreferences(PrefsConstants.PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.registerOnSharedPreferenceChangeListener(prefChangeListener)
 
         // Handle Status Bar Window Insets for AppBarLayout
         ViewCompat.setOnApplyWindowInsetsListener(binding.appBarLayout) { v, insets ->
@@ -46,6 +55,7 @@ class DashboardFragment : Fragment() {
 
         setupListeners()
         loadPreferences()
+        updateStats()
     }
 
     override fun onResume() {
@@ -56,6 +66,9 @@ class DashboardFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        try {
+            prefs.unregisterOnSharedPreferenceChangeListener(prefChangeListener)
+        } catch (_: Exception) {}
         _binding = null
     }
 

@@ -27,6 +27,8 @@ class SpamFilterEngine {
         return whitelistSet.contains(clean)
     }
 
+    fun hasKeywords(): Boolean = triePattern != null || customRegexes.isNotEmpty()
+
     fun updateKeywords(
         cloudKeywords: String?,
         userKeywords: String?,
@@ -62,7 +64,8 @@ class SpamFilterEngine {
     }
 
     /**
-     * Core filter method evaluating all criteria.
+     * Evaluates a tweet/comment against all configured rules.
+     * Returns FilterResult.Blocked or FilterResult.Pass.
      */
     fun shouldBlockTweet(
         fullText: String?,
@@ -72,44 +75,37 @@ class SpamFilterEngine {
         hasGrokCard: Boolean = false
     ): FilterResult {
         if (!isEnabled) return FilterResult.Pass
-
         if (isPromoted && isBlockPromoted) {
             return FilterResult.Blocked(FilterResult.BlockReason.PROMOTED_AD)
         }
+        if (isWhitelisted(screenName)) return FilterResult.Pass
 
-        if (isWhitelisted(screenName)) {
-            return FilterResult.Pass
-        }
-
-        if (hasGrokCard && isBlockGrok) {
+        if (isBlockGrok && hasGrokCard) {
             return FilterResult.Blocked(FilterResult.BlockReason.GROK_CARD)
-        }
-
-        if (isBlockSpecialChars) {
-            if (SpamCharCleaner.containsSpamChars(fullText) ||
-                (isCheckUsername && SpamCharCleaner.containsSpamChars(name))
-            ) {
-                return FilterResult.Blocked(FilterResult.BlockReason.SPECIAL_CHARS)
-            }
-        }
-
-        if (isBlockEmoji && !fullText.isNullOrEmpty()) {
-            if (SpamCharCleaner.containsEmoji(fullText)) {
-                return FilterResult.Blocked(FilterResult.BlockReason.EMOJI_SPAM)
-            }
-        }
-
-        if (isCheckUsername) {
-            if (matchesKeywords(name)) {
-                return FilterResult.Blocked(FilterResult.BlockReason.USERNAME_MATCH, name)
-            }
-            if (matchesKeywords(screenName)) {
-                return FilterResult.Blocked(FilterResult.BlockReason.USERNAME_MATCH, screenName)
-            }
         }
 
         if (matchesKeywords(fullText)) {
             return FilterResult.Blocked(FilterResult.BlockReason.KEYWORD_MATCH)
+        }
+
+        if (isCheckUsername) {
+            if (matchesKeywords(name) || matchesKeywords(screenName)) {
+                return FilterResult.Blocked(FilterResult.BlockReason.USERNAME_MATCH)
+            }
+        }
+
+        if (isBlockSpecialChars) {
+            if (SpamCharCleaner.containsSpamChars(fullText) ||
+                (isCheckUsername && SpamCharCleaner.containsSpamChars(name))) {
+                return FilterResult.Blocked(FilterResult.BlockReason.SPECIAL_CHARS)
+            }
+        }
+
+        if (isBlockEmoji) {
+            if (SpamCharCleaner.containsEmoji(fullText) ||
+                (isCheckUsername && SpamCharCleaner.containsEmoji(name))) {
+                return FilterResult.Blocked(FilterResult.BlockReason.EMOJI_SPAM)
+            }
         }
 
         return FilterResult.Pass

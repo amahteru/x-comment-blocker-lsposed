@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
 import com.xtwitter.blocker.engine.SpamFilterEngine
+import com.xtwitter.blocker.hook.XposedInit
 import de.robv.android.xposed.XSharedPreferences
 
 class ConfigManager private constructor(private val context: Context?) {
@@ -18,9 +19,6 @@ class ConfigManager private constructor(private val context: Context?) {
         }
     }
 
-    /**
-     * Initializes for Xposed context inside hooked target application.
-     */
     constructor() : this(null) {
         try {
             xPrefs = XSharedPreferences("com.xtwitter.blocker", PrefsConstants.PREFS_NAME)

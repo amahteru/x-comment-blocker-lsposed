@@ -13,8 +13,8 @@ class ConfigProvider : ContentProvider() {
     private lateinit var prefs: SharedPreferences
 
     override fun onCreate(): Boolean {
-        context?.let {
-            prefs = it.getSharedPreferences(PrefsConstants.PREFS_NAME, Context.MODE_PRIVATE)
+        context?.let { ctx ->
+            prefs = ctx.getSharedPreferences(PrefsConstants.PREFS_NAME, Context.MODE_PRIVATE)
         }
         return true
     }
@@ -30,7 +30,7 @@ class ConfigProvider : ContentProvider() {
                 bundle.putBoolean(PrefsConstants.KEY_BLOCK_EMOJI, prefs.getBoolean(PrefsConstants.KEY_BLOCK_EMOJI, false))
                 bundle.putBoolean(PrefsConstants.KEY_BLOCK_GROK, prefs.getBoolean(PrefsConstants.KEY_BLOCK_GROK, false))
                 bundle.putString(PrefsConstants.KEY_USER_KEYWORDS, prefs.getString(PrefsConstants.KEY_USER_KEYWORDS, ""))
-                bundle.putString(PrefsConstants.KEY_CLOUD_KEYWORDS, prefs.getString(PrefsConstants.KEY_CLOUD_KEYWORDS, ""))
+                bundle.putString(PrefsConstants.KEY_CLOUD_KEYWORDS, prefs.getString(PrefsConstants.KEY_CLOUD_KEYWORDS, "") ?: "")
                 bundle.putString(PrefsConstants.KEY_WHITELIST, prefs.getString(PrefsConstants.KEY_WHITELIST, ""))
                 val disabledSet = prefs.getStringSet(PrefsConstants.KEY_DISABLED_CLOUD_KEYWORDS, emptySet()) ?: emptySet()
                 bundle.putStringArrayList(PrefsConstants.KEY_DISABLED_CLOUD_KEYWORDS, ArrayList(disabledSet))

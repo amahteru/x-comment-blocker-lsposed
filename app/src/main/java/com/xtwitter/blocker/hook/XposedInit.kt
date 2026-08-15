@@ -8,6 +8,8 @@ import de.robv.android.xposed.XC_MethodReplacement
 import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_LoadPackage
+import java.io.File
+import java.util.zip.ZipFile
 
 class XposedInit : IXposedHookLoadPackage, IXposedHookZygoteInit {
 
@@ -22,10 +24,11 @@ class XposedInit : IXposedHookLoadPackage, IXposedHookZygoteInit {
     }
 
     override fun initZygote(startupParam: IXposedHookZygoteInit.StartupParam) {
+        XposedBridge.log("[$TAG] initZygote")
         try {
             ConfigManager.forXposed().loadToEngine(SpamFilterEngine.instance)
         } catch (t: Throwable) {
-            XposedBridge.log("[$TAG] Failed to load initial config in initZygote: ${t.message}")
+            XposedBridge.log("[$TAG] Failed to load config in initZygote: ${t.message}")
         }
     }
 

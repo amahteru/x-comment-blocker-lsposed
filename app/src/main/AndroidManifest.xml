@@ -52,6 +52,15 @@
             android:exported="true"
             tools:ignore="ExportedContentProvider" />
 
+        <!-- Receiver for blocked count updates -->
+        <receiver
+            android:name=".data.BlockedCountReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.xtwitter.blocker.ACTION_INCREMENT_BLOCKED" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>

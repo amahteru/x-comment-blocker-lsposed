@@ -30,7 +30,6 @@ class MainActivity : AppCompatActivity() {
 
         prefs = getSharedPreferences(PrefsConstants.PREFS_NAME, Context.MODE_PRIVATE)
 
-        initDefaultAssetsIfNeeded()
         setupInsets()
         setupNavigation()
     }
@@ -38,16 +37,6 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         ConfigManager.fromContext(this).loadToEngine(SpamFilterEngine.instance, this)
-    }
-
-    private fun initDefaultAssetsIfNeeded() {
-        val cloudKeywords = prefs.getString(PrefsConstants.KEY_CLOUD_KEYWORDS, null)
-        if (cloudKeywords == null) {
-            try {
-                val assetContent = assets.open("default_keywords.txt").bufferedReader().use { it.readText() }
-                prefs.edit().putString(PrefsConstants.KEY_CLOUD_KEYWORDS, assetContent).apply()
-            } catch (_: Exception) {}
-        }
     }
 
     private fun setupInsets() {

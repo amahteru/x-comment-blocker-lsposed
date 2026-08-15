@@ -2,33 +2,32 @@ package com.xtwitter.blocker.hook
 
 import android.app.Application
 import android.content.Context
-import android.net.Uri
-import android.os.Bundle
+import android.content.Intent
+import com.xtwitter.blocker.data.BlockedCountReceiver
 import com.xtwitter.blocker.data.ConfigManager
-import com.xtwitter.blocker.data.PrefsConstants
 import com.xtwitter.blocker.engine.SpamFilterEngine
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 import java.io.ByteArrayInputStream
+import java.io.File
 import java.io.InputStream
-import java.lang.reflect.InvocationHandler
-import java.lang.reflect.Method
-import java.lang.reflect.Proxy
+import java.util.concurrent.Executors
 import java.util.zip.GZIPInputStream
 
 object TwitterHook {
 
     private const val TAG = "XCommentBlocker-Hook"
+    private const val HEADER_PROCESSED = "X-Blocker-Processed"
     private var appContext: Context? = null
     private var lastConfigLoadTime = 0L
-    private const val CONFIG_RELOAD_INTERVAL_MS = 10_000L
+    private const val CONFIG_RELOAD_INTERVAL_MS = 15_000L
+    private val backgroundExecutor = Executors.newSingleThreadExecutor()
 
     fun initHook(lpparam: XC_LoadPackage.LoadPackageParam) {
         val classLoader = lpparam.classLoader
 
-        // 1. Hook Application onCreate to get Application Context & reload preferences
         try {
             XposedHelpers.findAndHookMethod(
                 Application::class.java,
@@ -38,8 +37,19 @@ object TwitterHook {
                         val app = param.thisObject as? Application ?: return
                         appContext = app
                         XposedBridge.log("[$TAG] Target Application initialized: ${app.packageName}")
-                        ConfigManager.fromContext(app).loadToEngine(SpamFilterEngine.instance, app)
-                        lastConfigLoadTime = System.currentTimeMillis()
+
+                        val appClassLoader = app.classLoader
+                        hookOkHttpSafe(appClassLoader)
+
+                        backgroundExecutor.execute {
+                            try {
+                                ConfigManager.fromContext(app).loadToEngine(SpamFilterEngine.instance, app)
+                                lastConfigLoadTime = System.currentTimeMillis()
+                                XposedBridge.log("[$TAG] Initial config loaded: isEnabled=${SpamFilterEngine.instance.isEnabled}, hasKeywords=${SpamFilterEngine.instance.hasKeywords()}")
+                            } catch (e: Throwable) {
+                                XposedBridge.log("[$TAG] Error loading config: ${e.message}")
+                            }
+                        }
                     }
                 }
             )
@@ -47,142 +57,127 @@ object TwitterHook {
             XposedBridge.log("[$TAG] Failed to hook Application.onCreate: ${t.message}")
         }
 
-        // 2. Hook OkHttpClient$Builder.build() using Dynamic Proxy across ClassLoaders
-        hookOkHttp(classLoader)
+        hookOkHttpSafe(classLoader)
     }
 
-    private fun hookOkHttp(classLoader: ClassLoader) {
+    private fun hookOkHttpSafe(classLoader: ClassLoader) {
         try {
-            val builderClass = XposedHelpers.findClassIfExists("okhttp3.OkHttpClient\$Builder", classLoader)
-                ?: XposedHelpers.findClassIfExists("com.squareup.okhttp.OkHttpClient\$Builder", classLoader)
+            val realInterceptorChainClass = XposedHelpers.findClassIfExists("okhttp3.internal.http.RealInterceptorChain", classLoader)
+                ?: XposedHelpers.findClassIfExists("okhttp3.internal.connection.RealCall\$RealInterceptorChain", classLoader)
 
-            val interceptorClass = XposedHelpers.findClassIfExists("okhttp3.Interceptor", classLoader)
-                ?: XposedHelpers.findClassIfExists("com.squareup.okhttp.Interceptor", classLoader)
+            if (realInterceptorChainClass != null) {
+                XposedBridge.hookAllMethods(realInterceptorChainClass, "proceed", object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        if (param.hasThrowable()) return
+                        val response = param.result ?: return
 
-            if (builderClass != null && interceptorClass != null) {
-                XposedBridge.hookAllMethods(builderClass, "build", object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        val builder = param.thisObject
                         try {
-                            val proxyInterceptor = createProxyInterceptor(interceptorClass, classLoader)
-                            XposedHelpers.callMethod(builder, "addInterceptor", proxyInterceptor)
-                            XposedBridge.log("[$TAG] Successfully injected dynamic GraphQL Interceptor into OkHttpClient\$Builder")
-                        } catch (t: Throwable) {
-                            XposedBridge.log("[$TAG] Failed to add Interceptor proxy: ${t.message}")
+                            val isProcessed = XposedHelpers.callMethod(response, "header", HEADER_PROCESSED) as? String
+                            if (isProcessed != null) return
+
+                            val request = XposedHelpers.callMethod(response, "request") ?: return
+                            val httpUrl = XposedHelpers.callMethod(request, "url") ?: return
+                            val url = httpUrl.toString()
+
+                            val newResponse = safeFilterOkHttpResponse(response, url, classLoader)
+                            if (newResponse != null) {
+                                param.result = newResponse
+                            }
+                        } catch (e: Throwable) {
+                            XposedBridge.log("[$TAG] OkHttp proceed hook error: ${e.message}")
                         }
                     }
                 })
+                XposedBridge.log("[$TAG] Successfully hooked OkHttp RealInterceptorChain.proceed safely")
             }
         } catch (t: Throwable) {
-            XposedBridge.log("[$TAG] Failed to hook OkHttpClient: ${t.message}")
+            XposedBridge.log("[$TAG] Safe OkHttp hook exception: ${t.message}")
         }
     }
 
-    /**
-     * Creates a java.lang.reflect.Proxy implementing target's okhttp3.Interceptor.
-     * This avoids ClassLoader mismatch between the module and Twitter APK.
-     */
-    private fun createProxyInterceptor(interceptorClass: Class<*>, classLoader: ClassLoader): Any {
-        return Proxy.newProxyInstance(
-            classLoader,
-            arrayOf(interceptorClass),
-            object : InvocationHandler {
-                override fun invoke(proxy: Any?, method: Method, args: Array<out Any>?): Any? {
-                    if (method.name == "intercept" && args != null && args.isNotEmpty()) {
-                        val chain = args[0]
-                        return handleIntercept(chain, classLoader)
-                    }
-                    if (method.name == "toString") {
-                        return "XCommentBlockerProxyInterceptor"
-                    }
-                    if (method.name == "hashCode") {
-                        return this.hashCode()
-                    }
-                    if (method.name == "equals" && args != null && args.isNotEmpty()) {
-                        return proxy === args[0]
-                    }
-                    return null
-                }
-            }
-        )
-    }
+    private fun safeFilterOkHttpResponse(response: Any, url: String, classLoader: ClassLoader): Any? {
+        val code = (XposedHelpers.callMethod(response, "code") as? Int) ?: 200
+        if (code !in 200..299) return null
 
-    private fun handleIntercept(chain: Any, classLoader: ClassLoader): Any {
-        val request = XposedHelpers.callMethod(chain, "request")
-        val httpUrl = XposedHelpers.callMethod(request, "url")
-        val url = httpUrl?.toString() ?: ""
-
-        val response = XposedHelpers.callMethod(chain, "proceed", request)
-
-        if (!url.contains("/graphql/") && !url.contains("/1.1/timeline/")) {
-            return response
-        }
-
-        val body = XposedHelpers.callMethod(response, "body") ?: return response
+        val body = XposedHelpers.callMethod(response, "body") ?: return null
         val contentType = XposedHelpers.callMethod(body, "contentType")
-        val mediaTypeString = contentType?.toString() ?: ""
 
-        if (!mediaTypeString.contains("json") && !url.contains("TweetDetail") && !url.contains("ThreadedConversation")) {
-            return response
+        val inputStream = XposedHelpers.callMethod(body, "byteStream") as? InputStream ?: return null
+        val rawBytes = try {
+            inputStream.readBytes()
+        } catch (_: Throwable) {
+            return null
         }
 
-        return try {
-            checkAndReloadConfigThrottled()
+        if (rawBytes.isEmpty()) return null
 
-            val stream = XposedHelpers.callMethod(body, "byteStream") as? InputStream
-            val rawBytes = stream?.readBytes()
-                ?: (XposedHelpers.callMethod(body, "bytes") as? ByteArray)
-                ?: return response
+        val contentEncoding = XposedHelpers.callMethod(response, "header", "Content-Encoding") as? String
+        val isGzip = contentEncoding?.equals("gzip", ignoreCase = true) == true
 
-            val contentEncoding = XposedHelpers.callMethod(response, "header", "Content-Encoding") as? String
-            val isGzip = contentEncoding?.equals("gzip", ignoreCase = true) == true
-
-            val jsonString = if (isGzip) {
-                try {
-                    GZIPInputStream(ByteArrayInputStream(rawBytes)).bufferedReader(Charsets.UTF_8).use { it.readText() }
-                } catch (_: Throwable) {
-                    String(rawBytes, Charsets.UTF_8)
-                }
-            } else {
+        val jsonString = if (isGzip) {
+            try {
+                GZIPInputStream(ByteArrayInputStream(rawBytes)).bufferedReader(Charsets.UTF_8).use { it.readText() }
+            } catch (_: Throwable) {
+                null
+            }
+        } else {
+            try {
                 String(rawBytes, Charsets.UTF_8)
+            } catch (_: Throwable) {
+                null
             }
+        }
 
-            val previousBlockedCount = GraphQLInterceptor.blockedCount.get()
-            val filteredJson = GraphQLInterceptor.filterJsonResponse(
-                jsonString,
-                SpamFilterEngine.instance
-            )
+        val responseBuilder = XposedHelpers.callMethod(response, "newBuilder") ?: return null
+        XposedHelpers.callMethod(responseBuilder, "header", HEADER_PROCESSED, "1")
 
-            val newBlockedDelta = GraphQLInterceptor.blockedCount.get() - previousBlockedCount
-            if (newBlockedDelta > 0) {
-                syncBlockedCountDelta(newBlockedDelta)
-            }
+        if (jsonString.isNullOrBlank() || !isPotentialTimelineJson(jsonString)) {
+            val unmodBody = createResponseBody(rawBytes, contentType, classLoader) ?: return null
+            XposedHelpers.callMethod(responseBuilder, "body", unmodBody)
+            return XposedHelpers.callMethod(responseBuilder, "build")
+        }
+
+        // Ensure engine is loaded before filtering
+        val context = appContext
+        if (context != null) {
+            try {
+                ConfigManager.fromContext(context).loadToEngine(SpamFilterEngine.instance, context)
+            } catch (_: Throwable) {}
+        }
+
+        val previousBlockedCount = GraphQLInterceptor.blockedCount.get()
+        val filteredJson = GraphQLInterceptor.filterJsonResponse(jsonString, SpamFilterEngine.instance)
+        val delta = GraphQLInterceptor.blockedCount.get() - previousBlockedCount
+
+        if (filteredJson != jsonString) {
+            XposedBridge.log("[$TAG] OkHttp filtered JSON successfully for $url! blockedCount delta: $delta")
+            if (delta > 0) syncBlockedCountDelta(delta)
 
             val newBytes = filteredJson.toByteArray(Charsets.UTF_8)
-            val newBody = createResponseBody(newBytes, contentType, classLoader) ?: return response
-
-            val responseBuilder = XposedHelpers.callMethod(response, "newBuilder")
+            val newBody = createResponseBody(newBytes, contentType, classLoader) ?: return null
             if (isGzip) {
-                XposedHelpers.callMethod(responseBuilder, "removeHeader", "Content-Encoding")
+                try { XposedHelpers.callMethod(responseBuilder, "removeHeader", "Content-Encoding") } catch (_: Throwable) {}
             }
-            XposedHelpers.callMethod(responseBuilder, "removeHeader", "Content-Length")
+            try { XposedHelpers.callMethod(responseBuilder, "removeHeader", "Content-Length") } catch (_: Throwable) {}
             XposedHelpers.callMethod(responseBuilder, "body", newBody)
-
-            XposedHelpers.callMethod(responseBuilder, "build") ?: response
-        } catch (e: Throwable) {
-            XposedBridge.log("[$TAG] Interceptor processing error: ${e.message}")
-            response
+            return XposedHelpers.callMethod(responseBuilder, "build")
+        } else {
+            val unmodBody = createResponseBody(rawBytes, contentType, classLoader) ?: return null
+            XposedHelpers.callMethod(responseBuilder, "body", unmodBody)
+            return XposedHelpers.callMethod(responseBuilder, "build")
         }
     }
 
-    private fun checkAndReloadConfigThrottled() {
-        val now = System.currentTimeMillis()
-        if (now - lastConfigLoadTime > CONFIG_RELOAD_INTERVAL_MS) {
-            lastConfigLoadTime = now
-            appContext?.let {
-                ConfigManager.fromContext(it).loadToEngine(SpamFilterEngine.instance, it)
-            }
-        }
+    private fun isPotentialTimelineJson(json: String): Boolean {
+        val trimmed = json.trimStart()
+        if (!trimmed.startsWith("{")) return false
+        return trimmed.contains("\"instructions\"") ||
+                trimmed.contains("\"itemContent\"") ||
+                trimmed.contains("\"tweet_results\"") ||
+                trimmed.contains("\"threaded_conversation\"") ||
+                trimmed.contains("\"home_timeline_urt\"") ||
+                trimmed.contains("\"timelineResponse\"") ||
+                trimmed.contains("\"timeline\"")
     }
 
     private fun createResponseBody(bytes: ByteArray, contentType: Any?, classLoader: ClassLoader): Any? {
@@ -193,43 +188,45 @@ object TwitterHook {
         val mediaTypeClass = XposedHelpers.findClassIfExists("okhttp3.MediaType", classLoader)
             ?: XposedHelpers.findClassIfExists("com.squareup.okhttp.MediaType", classLoader)
 
-        // Try static create(MediaType, byte[])
-        try {
-            if (mediaTypeClass != null) {
-                val method = responseBodyClass.methods.firstOrNull {
-                    it.name == "create" && it.parameterTypes.size == 2 &&
-                    it.parameterTypes[0].isAssignableFrom(mediaTypeClass) &&
-                    it.parameterTypes[1] == ByteArray::class.java
-                }
-                if (method != null) {
-                    return method.invoke(null, contentType, bytes)
-                }
-
-                val methodRev = responseBodyClass.methods.firstOrNull {
-                    it.name == "create" && it.parameterTypes.size == 2 &&
-                    it.parameterTypes[0] == ByteArray::class.java &&
-                    it.parameterTypes[1].isAssignableFrom(mediaTypeClass)
-                }
-                if (methodRev != null) {
-                    return methodRev.invoke(null, bytes, contentType)
-                }
-            }
-        } catch (_: Throwable) {}
-
-        // Try Companion object for OkHttp 4
+        // Method 1: Companion.create(byte[], MediaType?)
         try {
             val companionField = responseBodyClass.getField("Companion")
             val companionObj = companionField.get(null)
             if (companionObj != null) {
-                val method = companionObj.javaClass.methods.firstOrNull {
-                    it.name == "create" && it.parameterTypes.size == 2 &&
-                    it.parameterTypes.contains(ByteArray::class.java)
+                for (m in companionObj.javaClass.methods) {
+                    if (m.name == "create" && m.parameterTypes.size == 2) {
+                        if (m.parameterTypes[0] == ByteArray::class.java) {
+                            return m.invoke(companionObj, bytes, contentType)
+                        } else if (m.parameterTypes[1] == ByteArray::class.java) {
+                            return m.invoke(companionObj, contentType, bytes)
+                        }
+                    }
                 }
-                if (method != null) {
-                    return if (method.parameterTypes[0] == ByteArray::class.java) {
-                        method.invoke(companionObj, bytes, contentType)
-                    } else {
-                        method.invoke(companionObj, contentType, bytes)
+            }
+        } catch (_: Throwable) {}
+
+        // Method 2: Static ResponseBody.create(MediaType?, byte[])
+        try {
+            for (m in responseBodyClass.methods) {
+                if (m.name == "create" && m.parameterTypes.size == 2) {
+                    if (mediaTypeClass != null && m.parameterTypes[0].isAssignableFrom(mediaTypeClass) && m.parameterTypes[1] == ByteArray::class.java) {
+                        return m.invoke(null, contentType, bytes)
+                    } else if (mediaTypeClass != null && m.parameterTypes[0] == ByteArray::class.java && m.parameterTypes[1].isAssignableFrom(mediaTypeClass)) {
+                        return m.invoke(null, bytes, contentType)
+                    }
+                }
+            }
+        } catch (_: Throwable) {}
+
+        // Method 3: Companion.create(String, MediaType?)
+        try {
+            val companionField = responseBodyClass.getField("Companion")
+            val companionObj = companionField.get(null)
+            if (companionObj != null) {
+                val str = String(bytes, Charsets.UTF_8)
+                for (m in companionObj.javaClass.methods) {
+                    if (m.name == "create" && m.parameterTypes.size == 2 && m.parameterTypes[0] == String::class.java) {
+                        return m.invoke(companionObj, str, contentType)
                     }
                 }
             }
@@ -240,10 +237,17 @@ object TwitterHook {
 
     private fun syncBlockedCountDelta(delta: Int) {
         val context = appContext ?: return
-        try {
-            val uri = Uri.parse("content://${PrefsConstants.AUTHORITY}")
-            val bundle = Bundle().apply { putInt("count", delta) }
-            context.contentResolver.call(uri, PrefsConstants.METHOD_INCREMENT_BLOCKED, null, bundle)
-        } catch (_: Throwable) {}
+        backgroundExecutor.execute {
+            try {
+                val intent = Intent(BlockedCountReceiver.ACTION_INCREMENT_BLOCKED).apply {
+                    setClassName("com.xtwitter.blocker", "com.xtwitter.blocker.data.BlockedCountReceiver")
+                    putExtra("count", delta)
+                }
+                context.sendBroadcast(intent)
+                XposedBridge.log("[$TAG] Sent explicit blocked count broadcast delta +$delta to com.xtwitter.blocker")
+            } catch (e: Throwable) {
+                XposedBridge.log("[$TAG] Failed to send broadcast: ${e.message}")
+            }
+        }
     }
 }
