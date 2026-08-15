@@ -24,6 +24,7 @@ object TwitterHook {
     private var lastConfigLoadTime = 0L
     private const val CONFIG_RELOAD_INTERVAL_MS = 15_000L
     private val backgroundExecutor = Executors.newSingleThreadExecutor()
+    private val configManager = ConfigManager.forXposed()
 
     fun initHook(lpparam: XC_LoadPackage.LoadPackageParam) {
         val classLoader = lpparam.classLoader
@@ -43,12 +44,15 @@ object TwitterHook {
 
                         backgroundExecutor.execute {
                             try {
-                                ConfigManager.fromContext(app).loadToEngine(SpamFilterEngine.instance, app)
+                                configManager.loadToEngine(SpamFilterEngine.instance)
                                 lastConfigLoadTime = System.currentTimeMillis()
                                 XposedBridge.log("[$TAG] Initial config loaded: isEnabled=${SpamFilterEngine.instance.isEnabled}, hasKeywords=${SpamFilterEngine.instance.hasKeywords()}")
                             } catch (e: Throwable) {
                                 XposedBridge.log("[$TAG] Error loading config: ${e.message}")
                             }
+
+                            // Always also request via Ordered Broadcast for reliable cross-process sync
+                            requestConfigViaBroadcast(app)
                         }
                     }
                 }
@@ -58,6 +62,39 @@ object TwitterHook {
         }
 
         hookOkHttpSafe(classLoader)
+    }
+
+    private fun requestConfigViaBroadcast(context: Context, onComplete: ((Boolean) -> Unit)? = null) {
+        try {
+            val intent = Intent("com.xtwitter.blocker.ACTION_GET_CONFIG").apply {
+                setClassName("com.xtwitter.blocker", "com.xtwitter.blocker.data.ConfigQueryReceiver")
+                addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+            }
+            context.sendOrderedBroadcast(
+                intent,
+                null,
+                object : android.content.BroadcastReceiver() {
+                    override fun onReceive(ctx: Context, it: Intent) {
+                        val bundle = getResultExtras(false)
+                        if (bundle != null && (bundle.containsKey(com.xtwitter.blocker.data.PrefsConstants.KEY_ENABLED) || bundle.containsKey(com.xtwitter.blocker.data.PrefsConstants.KEY_CLOUD_KEYWORDS))) {
+                            ConfigManager.applyBundleToEngine(bundle, SpamFilterEngine.instance)
+                            lastConfigLoadTime = System.currentTimeMillis()
+                            XposedBridge.log("[$TAG] Config loaded via Ordered Broadcast: isEnabled=${SpamFilterEngine.instance.isEnabled}, hasKeywords=${SpamFilterEngine.instance.hasKeywords()}")
+                            onComplete?.invoke(true)
+                        } else {
+                            onComplete?.invoke(false)
+                        }
+                    }
+                },
+                null,
+                android.app.Activity.RESULT_OK,
+                null,
+                null
+            )
+        } catch (t: Throwable) {
+            XposedBridge.log("[$TAG] Failed to sendOrderedBroadcast for config: ${t.message}")
+            onComplete?.invoke(false)
+        }
     }
 
     private fun hookOkHttpSafe(classLoader: ClassLoader) {
@@ -79,11 +116,14 @@ object TwitterHook {
                             val httpUrl = XposedHelpers.callMethod(request, "url") ?: return
                             val url = httpUrl.toString()
 
+                            android.util.Log.i(TAG, "OkHttp response url: $url")
+
                             val newResponse = safeFilterOkHttpResponse(response, url, classLoader)
                             if (newResponse != null) {
                                 param.result = newResponse
                             }
                         } catch (e: Throwable) {
+                            android.util.Log.e(TAG, "OkHttp proceed hook error: ${e.message}", e)
                             XposedBridge.log("[$TAG] OkHttp proceed hook error: ${e.message}")
                         }
                     }
@@ -91,11 +131,16 @@ object TwitterHook {
                 XposedBridge.log("[$TAG] Successfully hooked OkHttp RealInterceptorChain.proceed safely")
             }
         } catch (t: Throwable) {
+            android.util.Log.e(TAG, "Safe OkHttp hook exception: ${t.message}", t)
             XposedBridge.log("[$TAG] Safe OkHttp hook exception: ${t.message}")
         }
     }
 
     private fun safeFilterOkHttpResponse(response: Any, url: String, classLoader: ClassLoader): Any? {
+        if (isIgnoredEndpoint(url)) {
+            return null
+        }
+
         val code = (XposedHelpers.callMethod(response, "code") as? Int) ?: 200
         if (code !in 200..299) return null
 
@@ -137,19 +182,23 @@ object TwitterHook {
             return XposedHelpers.callMethod(responseBuilder, "build")
         }
 
-        // Ensure engine is loaded before filtering
-        val context = appContext
-        if (context != null) {
-            try {
-                ConfigManager.fromContext(context).loadToEngine(SpamFilterEngine.instance, context)
-            } catch (_: Throwable) {}
+        // Throttled background reload to avoid blocking network filtering while keeping rules updated
+        val now = System.currentTimeMillis()
+        if (now - lastConfigLoadTime > CONFIG_RELOAD_INTERVAL_MS) {
+            lastConfigLoadTime = now
+            backgroundExecutor.execute {
+                try {
+                    configManager.loadToEngine(SpamFilterEngine.instance)
+                } catch (_: Throwable) {}
+            }
         }
 
         val previousBlockedCount = GraphQLInterceptor.blockedCount.get()
-        val filteredJson = GraphQLInterceptor.filterJsonResponse(jsonString, SpamFilterEngine.instance)
+        val filteredJson = GraphQLInterceptor.filterJsonResponse(jsonString, SpamFilterEngine.instance, url)
         val delta = GraphQLInterceptor.blockedCount.get() - previousBlockedCount
 
         if (filteredJson != jsonString) {
+            android.util.Log.i(TAG, "OkHttp filtered JSON successfully for $url! blockedCount delta: $delta")
             XposedBridge.log("[$TAG] OkHttp filtered JSON successfully for $url! blockedCount delta: $delta")
             if (delta > 0) syncBlockedCountDelta(delta)
 
@@ -166,6 +215,26 @@ object TwitterHook {
             XposedHelpers.callMethod(responseBuilder, "body", unmodBody)
             return XposedHelpers.callMethod(responseBuilder, "build")
         }
+    }
+
+    private fun isIgnoredEndpoint(url: String): Boolean {
+        val lower = url.lowercase()
+        return lower.contains("typeahead") ||
+                lower.contains("search_box") ||
+                lower.contains("search_features") ||
+                lower.contains("suggestions") ||
+                lower.contains("/guide") ||
+                lower.contains("settings") ||
+                lower.contains("feature_switch") ||
+                lower.contains("notifications") ||
+                lower.contains("/dm/") ||
+                lower.contains("direct_messages") ||
+                lower.contains("badge") ||
+                lower.contains("auth") ||
+                lower.contains("login") ||
+                lower.contains("live_pipeline") ||
+                lower.contains("media/upload") ||
+                lower.contains("/jot/")
     }
 
     private fun isPotentialTimelineJson(json: String): Boolean {

@@ -64,10 +64,16 @@ object SpamCharCleaner {
     }
 
     /**
-     * Normalizes text for keyword matching: strips invisible characters and lowers case.
+     * Normalizes text for keyword matching: strips invisible characters, performs NFKC normalization, and lowers case.
      */
     fun normalizeText(input: String?): String {
         if (input.isNullOrEmpty()) return ""
-        return removeInvisibleChars(input).lowercase()
+        val withoutInvisible = removeInvisibleChars(input)
+        val normalizedUnicode = try {
+            java.text.Normalizer.normalize(withoutInvisible, java.text.Normalizer.Form.NFKC)
+        } catch (_: Throwable) {
+            withoutInvisible
+        }
+        return normalizedUnicode.lowercase()
     }
 }

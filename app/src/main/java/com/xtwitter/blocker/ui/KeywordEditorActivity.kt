@@ -28,7 +28,7 @@ class KeywordEditorActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         mode = intent.getIntExtra(EXTRA_MODE, MODE_USER_KEYWORDS)
-        prefs = getSharedPreferences(PrefsConstants.PREFS_NAME, Context.MODE_PRIVATE)
+        prefs = ConfigManager.getPreferences(this)
 
         setupInsets()
         setupToolbar()
@@ -71,7 +71,6 @@ class KeywordEditorActivity : AppCompatActivity() {
             val content = binding.etKeywords.text?.toString() ?: ""
             val key = if (mode == MODE_USER_KEYWORDS) PrefsConstants.KEY_USER_KEYWORDS else PrefsConstants.KEY_WHITELIST
             prefs.edit().putString(key, content).apply()
-            ConfigManager.fromContext(this).loadToEngine(SpamFilterEngine.instance, this)
             Toast.makeText(this, "保存成功", Toast.LENGTH_SHORT).show()
             finish()
         }

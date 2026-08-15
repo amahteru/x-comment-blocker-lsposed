@@ -14,7 +14,7 @@ class ConfigProvider : ContentProvider() {
 
     override fun onCreate(): Boolean {
         context?.let { ctx ->
-            prefs = ctx.getSharedPreferences(PrefsConstants.PREFS_NAME, Context.MODE_PRIVATE)
+            prefs = ConfigManager.getPreferences(ctx)
         }
         return true
     }

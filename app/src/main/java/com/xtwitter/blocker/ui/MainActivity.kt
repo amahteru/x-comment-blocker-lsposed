@@ -28,7 +28,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        prefs = getSharedPreferences(PrefsConstants.PREFS_NAME, Context.MODE_PRIVATE)
+        prefs = ConfigManager.getPreferences(this)
 
         setupInsets()
         setupNavigation()
@@ -36,7 +36,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        ConfigManager.fromContext(this).loadToEngine(SpamFilterEngine.instance, this)
     }
 
     private fun setupInsets() {

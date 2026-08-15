@@ -60,6 +60,17 @@ class SpamFilterEngine {
             if (regex.matcher(normalized).find()) return true
         }
 
+        // Secondary check: text without whitespace (catches spaced-out spam like "微 信", "同 城 约")
+        val noWhitespace = normalized.filterNot { it.isWhitespace() }
+        if (noWhitespace.isNotEmpty() && noWhitespace.length != normalized.length) {
+            triePattern?.let { pattern ->
+                if (pattern.matcher(noWhitespace).find()) return true
+            }
+            for (regex in customRegexes) {
+                if (regex.matcher(noWhitespace).find()) return true
+            }
+        }
+
         return false
     }
 

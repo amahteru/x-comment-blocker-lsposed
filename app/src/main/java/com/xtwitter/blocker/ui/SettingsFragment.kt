@@ -14,6 +14,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import com.xtwitter.blocker.R
+import com.xtwitter.blocker.data.ConfigManager
 import com.xtwitter.blocker.data.PrefsConstants
 import com.xtwitter.blocker.databinding.FragmentSettingsBinding
 import com.xtwitter.blocker.hook.ModuleState
@@ -36,7 +37,7 @@ class SettingsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        prefs = requireContext().getSharedPreferences(PrefsConstants.PREFS_NAME, Context.MODE_PRIVATE)
+        prefs = ConfigManager.getPreferences(requireContext())
 
         // Handle Status Bar Window Insets for AppBarLayout
         ViewCompat.setOnApplyWindowInsetsListener(binding.appBarLayout) { v, insets ->

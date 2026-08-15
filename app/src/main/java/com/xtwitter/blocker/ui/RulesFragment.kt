@@ -41,7 +41,7 @@ class RulesFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        prefs = requireContext().getSharedPreferences(PrefsConstants.PREFS_NAME, Context.MODE_PRIVATE)
+        prefs = ConfigManager.getPreferences(requireContext())
 
         // Handle Status Bar Window Insets for AppBarLayout
         ViewCompat.setOnApplyWindowInsetsListener(binding.appBarLayout) { v, insets ->
@@ -122,7 +122,6 @@ class RulesFragment : Fragment() {
             result.onSuccess { count ->
                 Toast.makeText(ctx, "云端词库同步成功，共 $count 条", Toast.LENGTH_SHORT).show()
                 updateStats()
-                ConfigManager.fromContext(ctx).loadToEngine(SpamFilterEngine.instance, ctx)
             }.onFailure { err ->
                 Toast.makeText(ctx, "同步失败: ${err.localizedMessage}", Toast.LENGTH_LONG).show()
             }

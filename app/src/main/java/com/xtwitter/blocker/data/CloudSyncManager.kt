@@ -43,7 +43,7 @@ object CloudSyncManager {
             }
 
             if (!content.isNullOrEmpty()) {
-                val prefs = context.getSharedPreferences(PrefsConstants.PREFS_NAME, Context.MODE_PRIVATE)
+                val prefs = ConfigManager.getPreferences(context)
                 val lines = content!!.lines().filter { it.isNotBlank() }
                 prefs.edit()
                     .putString(PrefsConstants.KEY_CLOUD_KEYWORDS, content)

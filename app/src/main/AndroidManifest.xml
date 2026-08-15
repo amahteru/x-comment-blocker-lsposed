@@ -25,7 +25,10 @@
             android:value="@string/xposed_description" />
         <meta-data
             android:name="xposedminversion"
-            android:value="82" />
+            android:value="93" />
+        <meta-data
+            android:name="xposedsharedprefs"
+            android:value="true" />
         <meta-data
             android:name="xposedscope"
             android:resource="@array/xposed_scope" />
@@ -58,6 +61,15 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="com.xtwitter.blocker.ACTION_INCREMENT_BLOCKED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Receiver for cross-process configuration queries -->
+        <receiver
+            android:name=".data.ConfigQueryReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.xtwitter.blocker.ACTION_GET_CONFIG" />
             </intent-filter>
         </receiver>
 

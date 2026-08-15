@@ -18,7 +18,7 @@ object GraphQLInterceptor {
      * Filters GraphQL JSON string and returns modified JSON string.
      * Supports both modern snake_case / details format and legacy camelCase / legacy format.
      */
-    fun filterJsonResponse(json: String, engine: SpamFilterEngine): String {
+    fun filterJsonResponse(json: String, engine: SpamFilterEngine, url: String? = null): String {
         if (!engine.isEnabled) {
             return json
         }
@@ -29,22 +29,47 @@ object GraphQLInterceptor {
 
             var modified = false
 
-            // Try all possible timeline root containers
-            val timelineCandidates = listOf(
-                data.optJSONObject("threaded_conversation_with_injections_v2"),
-                data.optJSONObject("timelineResponse"),
-                data.optJSONObject("timeline_response"),
+            val isUrlConversation = url?.contains("ConversationTimeline", ignoreCase = true) == true ||
+                    url?.contains("TweetDetail", ignoreCase = true) == true ||
+                    url?.contains("TweetReplies", ignoreCase = true) == true ||
+                    url?.contains("ThreadedConversation", ignoreCase = true) == true
+
+            val threadedConversation = data.optJSONObject("threaded_conversation_with_injections_v2")
+            if (threadedConversation != null) {
+                if (processTimelineContainer(threadedConversation, engine, isConversationTimeline = true)) {
+                    modified = true
+                }
+            }
+
+            val timelineResponse = data.optJSONObject("timelineResponse") ?: data.optJSONObject("timeline_response")
+            val isTimelineResponseConv = isUrlConversation ||
+                    timelineResponse?.optString("id", "")?.contains("Replies", ignoreCase = true) == true ||
+                    timelineResponse?.optString("id", "")?.contains("Conversation", ignoreCase = true) == true
+
+            if (timelineResponse != null) {
+                val timelineObj = timelineResponse.optJSONObject("timeline") ?: timelineResponse
+                if (processTimelineContainer(timelineObj, engine, isConversationTimeline = isTimelineResponseConv)) {
+                    modified = true
+                }
+            }
+
+            // Try all possible other timeline root containers
+            val otherCandidates = listOf(
                 data.optJSONObject("timeline"),
+                data.optJSONObject("conversation_timeline"),
+                data.optJSONObject("tweet_detail"),
+                data.optJSONObject("threaded_conversation"),
                 data.optJSONObject("home")?.optJSONObject("home_timeline_urt"),
+                data.optJSONObject("bookmarks_timeline")?.optJSONObject("timeline"),
                 data.optJSONObject("search_by_raw_query")?.optJSONObject("search_timeline"),
                 data.optJSONObject("user")?.optJSONObject("result")?.optJSONObject("timeline")?.optJSONObject("timeline"),
                 data.optJSONObject("user")?.optJSONObject("result")?.optJSONObject("timeline_response"),
-                data
+                if (threadedConversation == null && timelineResponse == null) data else null
             )
 
-            for (timeline in timelineCandidates) {
+            for (timeline in otherCandidates) {
                 if (timeline == null) continue
-                if (processTimelineContainer(timeline, engine)) {
+                if (processTimelineContainer(timeline, engine, isConversationTimeline = isUrlConversation)) {
                     modified = true
                 }
             }
@@ -57,48 +82,134 @@ object GraphQLInterceptor {
 
     private fun processTimelineContainer(
         container: JSONObject,
-        engine: SpamFilterEngine
+        engine: SpamFilterEngine,
+        isConversationTimeline: Boolean = false
     ): Boolean {
         var modified = false
         val instructions = container.optJSONArray("instructions") ?: return false
 
+        var opAuthorScreenName: String? = null
+        var opAuthorUserId: String? = null
+
+        if (isConversationTimeline) {
+            // Find OP (thread author) from the first tweet entry
+            searchOp@ for (i in 0 until instructions.length()) {
+                val instr = instructions.optJSONObject(i) ?: continue
+                val entries = instr.optJSONArray("entries") ?: continue
+                for (j in 0 until entries.length()) {
+                    val entry = entries.optJSONObject(j) ?: continue
+                    val content = extractItemContent(entry.optJSONObject("content") ?: entry)
+                    if (content != null) {
+                        val (sn, uid) = extractAuthorInfo(content)
+                        if (!sn.isNullOrEmpty() || !uid.isNullOrEmpty()) {
+                            opAuthorScreenName = sn
+                            opAuthorUserId = uid
+                            break@searchOp
+                        }
+                    }
+                    val items = (entry.optJSONObject("content") ?: entry).optJSONArray("items")
+                        ?: (entry.optJSONObject("content") ?: entry).optJSONArray("moduleItems")
+                    if (items != null && items.length() > 0) {
+                        for (k in 0 until items.length()) {
+                            val itObj = items.optJSONObject(k) ?: continue
+                            val itContent = extractItemContent(itObj)
+                            if (itContent != null) {
+                                val (sn, uid) = extractAuthorInfo(itContent)
+                                if (!sn.isNullOrEmpty() || !uid.isNullOrEmpty()) {
+                                    opAuthorScreenName = sn
+                                    opAuthorUserId = uid
+                                    break@searchOp
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         for (i in 0 until instructions.length()) {
             val instruction = instructions.optJSONObject(i) ?: continue
 
-            // TimelineAddEntries / TimelineAddToModule
+            // 1. TimelineAddEntries
             val entries = instruction.optJSONArray("entries")
             if (entries != null) {
-                if (filterEntriesArray(entries, engine)) {
+                if (filterEntriesArray(entries, engine, isConversationTimeline, opAuthorScreenName, opAuthorUserId)) {
                     modified = true
                 }
             }
 
+            // 2. TimelineAddToModule (moduleItems / module_items / items / module.items)
             val moduleItems = instruction.optJSONArray("moduleItems")
                 ?: instruction.optJSONArray("module_items")
                 ?: instruction.optJSONArray("items")
+                ?: instruction.optJSONObject("module")?.optJSONArray("items")
             if (moduleItems != null) {
-                if (filterItemsArray(moduleItems, engine)) {
+                if (filterItemsArray(moduleItems, engine, isConversationTimeline, opAuthorScreenName, opAuthorUserId)) {
                     modified = true
                 }
             }
 
-            // TimelinePinEntry / item / entry
+            // 3. TimelineReplaceEntry / TimelinePinEntry (single entry)
             val singleEntry = instruction.optJSONObject("entry")
             if (singleEntry != null) {
-                val content = extractItemContent(singleEntry)
-                if (content != null && shouldFilterItemContent(content, engine)) {
-                    instruction.remove("entry")
-                    blockedCount.incrementAndGet()
-                    modified = true
+                val content = singleEntry.optJSONObject("content") ?: singleEntry
+                val items = content.optJSONArray("items")
+                    ?: content.optJSONArray("moduleItems")
+                    ?: singleEntry.optJSONArray("items")
+                if (items != null) {
+                    if (filterItemsArray(items, engine, isConversationTimeline, opAuthorScreenName, opAuthorUserId)) {
+                        modified = true
+                    }
+                } else {
+                    val itemContent = extractItemContent(content) ?: extractItemContent(singleEntry)
+                    if (itemContent != null && !isExemptTweet(itemContent, isConversationTimeline, opAuthorScreenName, opAuthorUserId)) {
+                        if (shouldFilterItemContent(itemContent, engine)) {
+                            instruction.remove("entry")
+                            blockedCount.incrementAndGet()
+                            modified = true
+                        }
+                    }
                 }
             }
         }
         return modified
     }
 
+    private fun isExemptTweet(
+        itemContent: JSONObject,
+        isConversationTimeline: Boolean,
+        opAuthorScreenName: String?,
+        opAuthorUserId: String?
+    ): Boolean {
+        if (!isConversationTimeline) return false
+
+        val tweetDisplayType = itemContent.optString("tweet_display_type", "").ifEmpty {
+            itemContent.optString("tweetDisplayType", "")
+        }
+
+        if (tweetDisplayType.equals("SelfThread", ignoreCase = true) ||
+            tweetDisplayType.equals("FocalTweet", ignoreCase = true) ||
+            tweetDisplayType.equals("Ancestor", ignoreCase = true)) {
+            return true
+        }
+
+        val (screenName, restId) = extractAuthorInfo(itemContent)
+        if (!opAuthorScreenName.isNullOrEmpty() && screenName.equals(opAuthorScreenName, ignoreCase = true)) {
+            return true
+        }
+        if (!opAuthorUserId.isNullOrEmpty() && restId.equals(opAuthorUserId, ignoreCase = true)) {
+            return true
+        }
+
+        return false
+    }
+
     private fun filterEntriesArray(
         entries: JSONArray,
-        engine: SpamFilterEngine
+        engine: SpamFilterEngine,
+        isConversationTimeline: Boolean = false,
+        opAuthorScreenName: String? = null,
+        opAuthorUserId: String? = null
     ): Boolean {
         var modified = false
         val toRemoveIndices = mutableListOf<Int>()
@@ -138,13 +249,15 @@ object GraphQLInterceptor {
 
             // Check items array (modules / conversations / related tweets)
             val items = content.optJSONArray("items")
+                ?: content.optJSONArray("moduleItems")
                 ?: entry.optJSONArray("items")
+                ?: entry.optJSONArray("moduleItems")
             if (items != null) {
-                if (filterItemsArray(items, engine)) {
+                if (filterItemsArray(items, engine, isConversationTimeline, opAuthorScreenName, opAuthorUserId)) {
                     modified = true
                 }
-                // If all items in this module were removed, remove the whole module entry
-                if (items.length() == 0) {
+                // If all non-cursor items in this module were removed, remove the whole module entry
+                if (isModuleEmptyOrOnlyCursors(items)) {
                     toRemoveIndices.add(i)
                 }
                 continue
@@ -153,6 +266,10 @@ object GraphQLInterceptor {
             // Check direct itemContent
             val itemContent = extractItemContent(content) ?: extractItemContent(entry)
             if (itemContent != null) {
+                if (isExemptTweet(itemContent, isConversationTimeline, opAuthorScreenName, opAuthorUserId)) {
+                    continue
+                }
+
                 if (shouldFilterItemContent(itemContent, engine)) {
                     toRemoveIndices.add(i)
                     blockedCount.incrementAndGet()
@@ -170,7 +287,10 @@ object GraphQLInterceptor {
 
     private fun filterItemsArray(
         items: JSONArray,
-        engine: SpamFilterEngine
+        engine: SpamFilterEngine,
+        isConversationTimeline: Boolean = false,
+        opAuthorScreenName: String? = null,
+        opAuthorUserId: String? = null
     ): Boolean {
         var modified = false
         val toRemoveIndices = mutableListOf<Int>()
@@ -179,6 +299,11 @@ object GraphQLInterceptor {
             val itemObj = items.optJSONObject(i) ?: continue
             val entryId = itemObj.optString("entry_id", "").ifEmpty {
                 itemObj.optString("entryId", "")
+            }
+
+            // Never remove pagination cursors inside items
+            if (entryId.startsWith("cursor-") || entryId.startsWith("cursor_")) {
+                continue
             }
 
             if (entryId.startsWith("promoted-") || entryId.startsWith("promoted_")) {
@@ -191,10 +316,16 @@ object GraphQLInterceptor {
             }
 
             val itemContent = extractItemContent(itemObj)
-            if (itemContent != null && shouldFilterItemContent(itemContent, engine)) {
-                toRemoveIndices.add(i)
-                blockedCount.incrementAndGet()
-                modified = true
+            if (itemContent != null) {
+                if (isExemptTweet(itemContent, isConversationTimeline, opAuthorScreenName, opAuthorUserId)) {
+                    continue
+                }
+
+                if (shouldFilterItemContent(itemContent, engine)) {
+                    toRemoveIndices.add(i)
+                    blockedCount.incrementAndGet()
+                    modified = true
+                }
             }
         }
 
@@ -203,6 +334,53 @@ object GraphQLInterceptor {
         }
 
         return modified
+    }
+
+    private fun isModuleEmptyOrOnlyCursors(items: JSONArray): Boolean {
+        if (items.length() == 0) return true
+        for (i in 0 until items.length()) {
+            val it = items.optJSONObject(i) ?: continue
+            val eid = it.optString("entry_id", "").ifEmpty { it.optString("entryId", "") }
+            if (!eid.startsWith("cursor-") && !eid.startsWith("cursor_")) {
+                return false
+            }
+        }
+        return true
+    }
+
+    private fun extractAuthorInfo(itemContent: JSONObject): Pair<String?, String?> {
+        val result = getTweetResultObject(itemContent) ?: return Pair(null, null)
+        val core = result.optJSONObject("core")
+        var userResult = core?.optJSONObject("user_results")?.optJSONObject("result")
+            ?: core?.optJSONObject("userResults")?.optJSONObject("result")
+            ?: result.optJSONObject("user_results")?.optJSONObject("result")
+            ?: result.optJSONObject("userResults")?.optJSONObject("result")
+
+        if (userResult != null && userResult.optString("__typename") == "UserWithVisibilityResults") {
+            userResult = userResult.optJSONObject("user") ?: userResult
+        }
+        val userCore = userResult?.optJSONObject("core")
+        val userLegacy = userResult?.optJSONObject("legacy")
+        val screenName = userCore?.optString("screen_name", "")?.ifEmpty {
+            userLegacy?.optString("screen_name", "")
+        }
+        val restId = userResult?.optString("rest_id", "")
+        return Pair(screenName, restId)
+    }
+
+    private fun getTweetResultObject(itemContent: JSONObject): JSONObject? {
+        val tweetResults = itemContent.optJSONObject("tweet_results")
+            ?: itemContent.optJSONObject("tweetResults")
+        var result = tweetResults?.optJSONObject("result")
+            ?: itemContent.optJSONObject("tombstone")?.optJSONObject("tweet")?.optJSONObject("result")
+            ?: itemContent.optJSONObject("tombstone")?.optJSONObject("tweet_results")?.optJSONObject("result")
+            ?: itemContent.optJSONObject("tweet")
+            ?: itemContent.optJSONObject("result")
+
+        if (result != null && result.optString("__typename") == "TweetWithVisibilityResults") {
+            result = result.optJSONObject("tweet") ?: result
+        }
+        return result
     }
 
     /**
@@ -215,7 +393,7 @@ object GraphQLInterceptor {
                 ?: item.optJSONObject("item_content")
                 ?: item.optJSONObject("content")
             if (itemContent != null) return itemContent
-            if (item.has("tweet_results") || item.has("tweetResults")) return item
+            if (item.has("tweet_results") || item.has("tweetResults") || item.has("tombstone")) return item
         }
 
         val content = obj.optJSONObject("content")
@@ -226,17 +404,18 @@ object GraphQLInterceptor {
                     ?: innerItem.optJSONObject("itemContent")
                     ?: innerItem.optJSONObject("item_content")
                 if (innerContent != null) return innerContent
+                if (innerItem.has("tweet_results") || innerItem.has("tweetResults") || innerItem.has("tombstone")) return innerItem
             }
             val innerContent = content.optJSONObject("itemContent")
                 ?: content.optJSONObject("item_content")
             if (innerContent != null) return innerContent
-            if (content.has("tweet_results") || content.has("tweetResults")) return content
+            if (content.has("tweet_results") || content.has("tweetResults") || content.has("tombstone")) return content
         }
 
         val directContent = obj.optJSONObject("itemContent") ?: obj.optJSONObject("item_content")
         if (directContent != null) return directContent
 
-        if (obj.has("tweet_results") || obj.has("tweetResults")) return obj
+        if (obj.has("tweet_results") || obj.has("tweetResults") || obj.has("tombstone")) return obj
 
         return null
     }
@@ -253,15 +432,7 @@ object GraphQLInterceptor {
             return true
         }
 
-        val tweetResults = itemContent.optJSONObject("tweet_results")
-            ?: itemContent.optJSONObject("tweetResults")
-        var result = tweetResults?.optJSONObject("result")
-
-        // In some responses, result is wrapped in TweetWithVisibilityResults
-        if (result != null && result.optString("__typename") == "TweetWithVisibilityResults") {
-            result = result.optJSONObject("tweet") ?: result
-        }
-
+        val result = getTweetResultObject(itemContent)
         if (result == null) {
             return isPromoted && engine.isBlockPromoted
         }
@@ -282,7 +453,8 @@ object GraphQLInterceptor {
         val noteTweet = result.optJSONObject("note_tweet")
             ?.optJSONObject("note_tweet_results")
             ?.optJSONObject("result")
-        val noteText = noteTweet?.optString("text", "") ?: ""
+        val noteText = noteTweet?.optString("text", "")
+            ?.ifEmpty { noteTweet?.optJSONObject("rich_text")?.optString("text", "") } ?: ""
         if (noteText.isNotEmpty()) {
             fullText = if (fullText.isEmpty()) noteText else "$fullText $noteText"
         }
@@ -308,6 +480,9 @@ object GraphQLInterceptor {
         val core = result.optJSONObject("core")
         var userResult = core?.optJSONObject("user_results")?.optJSONObject("result")
             ?: core?.optJSONObject("userResults")?.optJSONObject("result")
+            ?: result.optJSONObject("user_results")?.optJSONObject("result")
+            ?: result.optJSONObject("userResults")?.optJSONObject("result")
+
         if (userResult != null && userResult.optString("__typename") == "UserWithVisibilityResults") {
             userResult = userResult.optJSONObject("user") ?: userResult
         }

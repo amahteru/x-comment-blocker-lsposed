@@ -43,7 +43,7 @@ class DashboardFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        prefs = requireContext().getSharedPreferences(PrefsConstants.PREFS_NAME, Context.MODE_PRIVATE)
+        prefs = ConfigManager.getPreferences(requireContext())
         prefs.registerOnSharedPreferenceChangeListener(prefChangeListener)
 
         // Handle Status Bar Window Insets for AppBarLayout
@@ -73,37 +73,29 @@ class DashboardFragment : Fragment() {
     }
 
     private fun setupListeners() {
-        val ctx = requireContext()
-
         binding.switchMaster.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean(PrefsConstants.KEY_ENABLED, isChecked).apply()
             updateStatusCard(isChecked)
-            ConfigManager.fromContext(ctx).loadToEngine(SpamFilterEngine.instance, ctx)
         }
 
         binding.switchBlockPromoted.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean(PrefsConstants.KEY_BLOCK_PROMOTED, isChecked).apply()
-            ConfigManager.fromContext(ctx).loadToEngine(SpamFilterEngine.instance, ctx)
         }
 
         binding.switchCheckUsername.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean(PrefsConstants.KEY_CHECK_USERNAME, isChecked).apply()
-            ConfigManager.fromContext(ctx).loadToEngine(SpamFilterEngine.instance, ctx)
         }
 
         binding.switchBlockSpecialChars.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean(PrefsConstants.KEY_BLOCK_SPECIAL_CHARS, isChecked).apply()
-            ConfigManager.fromContext(ctx).loadToEngine(SpamFilterEngine.instance, ctx)
         }
 
         binding.switchBlockEmoji.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean(PrefsConstants.KEY_BLOCK_EMOJI, isChecked).apply()
-            ConfigManager.fromContext(ctx).loadToEngine(SpamFilterEngine.instance, ctx)
         }
 
         binding.switchBlockGrok.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean(PrefsConstants.KEY_BLOCK_GROK, isChecked).apply()
-            ConfigManager.fromContext(ctx).loadToEngine(SpamFilterEngine.instance, ctx)
         }
     }
 
