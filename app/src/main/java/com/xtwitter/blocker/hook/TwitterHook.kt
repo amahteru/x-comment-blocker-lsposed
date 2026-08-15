@@ -114,6 +114,16 @@ object TwitterHook {
         }
     }
 
+    private fun requestConfigViaBroadcastSync(context: Context, timeoutMs: Long = 1000) {
+        val latch = java.util.concurrent.CountDownLatch(1)
+        requestConfigViaBroadcast(context) {
+            latch.countDown()
+        }
+        try {
+            latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (_: Throwable) {}
+    }
+
     private fun hookOkHttpSafe(classLoader: ClassLoader) {
         try {
             val realInterceptorChainClass = XposedHelpers.findClassIfExists("okhttp3.internal.http.RealInterceptorChain", classLoader)
@@ -204,7 +214,9 @@ object TwitterHook {
         if (!SpamFilterEngine.instance.hasKeywords()) {
             try {
                 if (appContext != null) {
-                    ConfigManager.loadFromContentProvider(appContext!!, SpamFilterEngine.instance)
+                    if (!ConfigManager.loadFromContentProvider(appContext!!, SpamFilterEngine.instance)) {
+                        requestConfigViaBroadcastSync(appContext!!, 1000)
+                    }
                 }
                 if (!SpamFilterEngine.instance.hasKeywords()) {
                     configManager.loadToEngine(SpamFilterEngine.instance)
@@ -215,7 +227,11 @@ object TwitterHook {
             lastConfigLoadTime = now
             backgroundExecutor.execute {
                 try {
-                    if (appContext != null && !ConfigManager.loadFromContentProvider(appContext!!, SpamFilterEngine.instance)) {
+                    if (appContext != null) {
+                        if (!ConfigManager.loadFromContentProvider(appContext!!, SpamFilterEngine.instance)) {
+                            requestConfigViaBroadcast(appContext!!)
+                        }
+                    } else {
                         configManager.loadToEngine(SpamFilterEngine.instance)
                     }
                 } catch (_: Throwable) {}

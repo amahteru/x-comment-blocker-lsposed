@@ -63,6 +63,20 @@ object SpamCharCleaner {
         return EMOJI_REGEX.matcher(input).find()
     }
 
+    // Matches whitespace and common separators/delimiters used by spammers to bypass keyword matching (e.g. 找.萢友, 微_信, 同-城-约)
+    // Aligned with desktop extension: /[\s_.\-]+/gv plus standard Unicode punctuation
+    private val SEPARATORS_REGEX: Pattern = Pattern.compile(
+        "[\\s_.\u00B7\u2022\u30FB\\-—–~～|/\\\\,:：，。、；;！!？?+*]+"
+    )
+
+    /**
+     * Strips whitespace and common delimiter/separator characters.
+     */
+    fun removeSeparators(input: String?): String {
+        if (input.isNullOrEmpty()) return ""
+        return SEPARATORS_REGEX.matcher(input).replaceAll("")
+    }
+
     /**
      * Normalizes text for keyword matching: strips invisible characters, performs NFKC normalization, and lowers case.
      */

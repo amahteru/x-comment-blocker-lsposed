@@ -40,4 +40,13 @@ class SpamCharCleanerTest {
         assertTrue(SpamCharCleaner.containsEmoji("😀"))
         assertFalse(SpamCharCleaner.containsEmoji("纯文本无表情"))
     }
+
+    @Test
+    fun testRemoveSeparators() {
+        assertEquals("找萢友", SpamCharCleaner.removeSeparators("找.萢友"))
+        assertEquals("同城约", SpamCharCleaner.removeSeparators("同-城-约"))
+        assertEquals("微信", SpamCharCleaner.removeSeparators("微_信"))
+        assertEquals("同城约", SpamCharCleaner.removeSeparators("同·城•约"))
+        assertEquals("同城约", SpamCharCleaner.removeSeparators("同，城。约"))
+    }
 }
