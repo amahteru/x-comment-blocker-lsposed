@@ -1,0 +1,123 @@
+name: CI - Build, Test & E2E Emulation
+
+on:
+  push:
+    branches: [ "main", "master", "dev" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-unit-test:
+    name: 🛠️ Unit Tests & Build APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Run Unit Tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      - name: Build Debug & Release APK
+        run: ./gradlew assembleDebug assembleRelease
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+
+      - name: Upload Release APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          retention-days: 14
+
+      - name: Upload Unit Test Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: app/build/reports/tests/testDebugUnitTest/
+          retention-days: 7
+
+  e2e-lspatch-emulation-test:
+    name: 📱 E2E Real Emulation Test (LSPatch + AVD)
+    needs: build-and-unit-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Download Debug APK Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-debug
+          path: artifacts/
+
+      - name: Grant execute permissions for scripts
+        run: |
+          chmod +x scripts/*.sh || true
+
+      - name: Enable KVM Hardware Acceleration
+        run: |
+          echo 'Checking KVM support...'
+          sudo apt-get update -y && sudo apt-get install -y cpu-checker
+          kvm-ok || true
+          sudo chmod 777 /dev/kvm || true
+
+      - name: Prepare LSPatch CLI Tool
+        run: |
+          mkdir -p tools
+          echo "Downloading latest LSPatch CLI jar..."
+          curl -sL https://github.com/JingMatrix/LSPatch/releases/latest/download/lspatch.jar -o tools/lspatch.jar || true
+          ls -la tools/
+
+      - name: Run E2E Test on Android Emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          cores: 2
+          ram-size: 3072M
+          heap-size: 512M
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-audio
+          script: bash scripts/e2e_lspatch_verify.sh
+
+      - name: Upload Emulation Logs & Logcat
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-logcat
+          path: logs/
+          retention-days: 7

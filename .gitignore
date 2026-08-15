@@ -11,3 +11,6 @@
 local.properties
 *.apk
 *.aab
+tools/
+patched/
+logs/
