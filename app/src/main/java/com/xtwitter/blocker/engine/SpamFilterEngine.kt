@@ -50,25 +50,48 @@ class SpamFilterEngine {
      */
     fun matchesKeywords(text: String?): Boolean {
         if (text.isNullOrEmpty()) return false
+        val withoutInvisible = SpamCharCleaner.removeInvisibleChars(text)
         val normalized = SpamCharCleaner.normalizeText(text)
 
+        // 1. Check custom regexes on raw text (preserves original emojis like 🈷️, 🍑, ❤️ from being converted to Chinese chars by NFKC)
+        for (regex in customRegexes) {
+            if (regex.matcher(withoutInvisible).find()) return true
+        }
+
+        // 2. Check Trie pattern and custom regexes on NFKC normalized text
         triePattern?.let { pattern ->
             if (pattern.matcher(normalized).find()) return true
         }
-
         for (regex in customRegexes) {
             if (regex.matcher(normalized).find()) return true
         }
 
-        // Secondary check: text without whitespace and common delimiter characters (catches "找.萢友", "微 信", "同-城-约")
-        // Aligned with desktop extension: userName.replaceAll(/[\s_.\-]+/gv, '')
-        val withoutSeparators = SpamCharCleaner.removeSeparators(normalized)
-        if (withoutSeparators.isNotEmpty() && withoutSeparators.length != normalized.length) {
+        // 3. If raw text differs from normalized, also check Trie pattern on raw text
+        if (withoutInvisible != normalized) {
             triePattern?.let { pattern ->
-                if (pattern.matcher(withoutSeparators).find()) return true
+                if (pattern.matcher(withoutInvisible).find()) return true
+            }
+        }
+
+        // 4. Secondary check: text without whitespace and common delimiter characters (catches "找.萢友", "微 信", "同-城-约", "母狗（接任务")
+        // Aligned with desktop extension: userName.replaceAll(/[\s_.\-]+/gv, '')
+        val withoutSeparatorsNorm = SpamCharCleaner.removeSeparators(normalized)
+        if (withoutSeparatorsNorm.isNotEmpty() && withoutSeparatorsNorm.length != normalized.length) {
+            triePattern?.let { pattern ->
+                if (pattern.matcher(withoutSeparatorsNorm).find()) return true
             }
             for (regex in customRegexes) {
-                if (regex.matcher(withoutSeparators).find()) return true
+                if (regex.matcher(withoutSeparatorsNorm).find()) return true
+            }
+        }
+
+        val withoutSeparatorsRaw = SpamCharCleaner.removeSeparators(withoutInvisible)
+        if (withoutSeparatorsRaw.isNotEmpty() && withoutSeparatorsRaw != withoutSeparatorsNorm && withoutSeparatorsRaw.length != withoutInvisible.length) {
+            triePattern?.let { pattern ->
+                if (pattern.matcher(withoutSeparatorsRaw).find()) return true
+            }
+            for (regex in customRegexes) {
+                if (regex.matcher(withoutSeparatorsRaw).find()) return true
             }
         }
 

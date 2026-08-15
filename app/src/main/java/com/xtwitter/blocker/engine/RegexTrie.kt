@@ -40,6 +40,10 @@ class RegexTrie {
 
             val seen = mutableSetOf<String>()
             for (kw in plainKeywords) {
+                val normalized = SpamCharCleaner.normalizeText(kw)
+                if (normalized.isNotEmpty() && normalized.length <= MAX_KEYWORD_LENGTH) {
+                    seen.add(normalized)
+                }
                 val cleaned = SpamCharCleaner.removeInvisibleChars(kw).trim().lowercase()
                 if (cleaned.isNotEmpty() && cleaned.length <= MAX_KEYWORD_LENGTH) {
                     seen.add(cleaned)
