@@ -145,7 +145,7 @@ object TwitterHook {
 
                             android.util.Log.i(TAG, "OkHttp response url: $url")
 
-                            val newResponse = safeFilterOkHttpResponse(response, url, classLoader)
+                            val newResponse = safeFilterOkHttpResponse(response, request, param.thisObject, url, classLoader)
                             if (newResponse != null) {
                                 param.result = newResponse
                             }
@@ -163,7 +163,13 @@ object TwitterHook {
         }
     }
 
-    private fun safeFilterOkHttpResponse(response: Any, url: String, classLoader: ClassLoader): Any? {
+    private fun safeFilterOkHttpResponse(
+        response: Any,
+        request: Any,
+        chain: Any?,
+        url: String,
+        classLoader: ClassLoader
+    ): Any? {
         if (isIgnoredEndpoint(url)) {
             return null
         }
@@ -242,7 +248,39 @@ object TwitterHook {
         val previousBlockedCount = GraphQLInterceptor.blockedCount.get()
         val engine = SpamFilterEngine.instance
         android.util.Log.i(TAG, "safeFilter checking: url=$url, hasKeywords=${engine.hasKeywords()}, isEnabled=${engine.isEnabled}")
-        val filteredJson = GraphQLInterceptor.filterJsonResponse(jsonString, engine, url)
+        var filteredJson = GraphQLInterceptor.filterJsonResponse(jsonString, engine, url)
+
+        // Auto-Pagination Buffering for conversation timelines to prevent screen jump
+        val isConversationUrl = url.contains("ConversationTimeline", ignoreCase = true) ||
+                url.contains("TweetDetail", ignoreCase = true) ||
+                url.contains("TweetReplies", ignoreCase = true) ||
+                url.contains("ThreadedConversation", ignoreCase = true)
+
+        if (isConversationUrl && chain != null && engine.isEnabled) {
+            var currentValidCount = GraphQLInterceptor.countValidCommentEntries(filteredJson)
+            var currentCursor = GraphQLInterceptor.extractBottomCursor(filteredJson)
+            var autoPageCount = 0
+            val maxAutoPages = 3
+            val minDesiredReplies = 3
+
+            while (currentValidCount < minDesiredReplies && !currentCursor.isNullOrBlank() && autoPageCount < maxAutoPages) {
+                autoPageCount++
+                android.util.Log.i(TAG, "Auto-fetching next page #$autoPageCount for $url with cursor=$currentCursor (valid items: $currentValidCount)")
+
+                val nextRawJson = fetchNextPageJson(request, chain, currentCursor, classLoader) ?: break
+                val nextFilteredJson = GraphQLInterceptor.filterJsonResponse(nextRawJson, engine, url)
+                val nextCursor = GraphQLInterceptor.extractBottomCursor(nextFilteredJson)
+
+                filteredJson = GraphQLInterceptor.mergeTimelineResponses(filteredJson, nextFilteredJson)
+                currentValidCount = GraphQLInterceptor.countValidCommentEntries(filteredJson)
+
+                if (nextCursor == currentCursor || nextCursor.isNullOrBlank()) {
+                    break
+                }
+                currentCursor = nextCursor
+            }
+        }
+
         val delta = GraphQLInterceptor.blockedCount.get() - previousBlockedCount
         android.util.Log.i(TAG, "safeFilter result: delta=$delta, modified=${filteredJson != jsonString}")
 
@@ -265,6 +303,97 @@ object TwitterHook {
             return XposedHelpers.callMethod(responseBuilder, "build")
         }
     }
+
+    private fun updateUrlVariablesCursor(urlString: String, nextCursor: String): String {
+        return try {
+            val uri = android.net.Uri.parse(urlString)
+            val variablesStr = uri.getQueryParameter("variables") ?: return urlString
+            val variablesJson = org.json.JSONObject(variablesStr)
+            variablesJson.put("cursor", nextCursor)
+
+            val uriBuilder = uri.buildUpon()
+            uriBuilder.clearQuery()
+            for (paramName in uri.queryParameterNames) {
+                if (paramName == "variables") {
+                    uriBuilder.appendQueryParameter("variables", variablesJson.toString())
+                } else {
+                    for (paramVal in uri.getQueryParameters(paramName)) {
+                        uriBuilder.appendQueryParameter(paramName, paramVal)
+                    }
+                }
+            }
+            uriBuilder.build().toString()
+        } catch (_: Throwable) {
+            urlString
+        }
+    }
+
+    private fun fetchNextPageJson(
+        request: Any,
+        chain: Any,
+        nextCursor: String,
+        classLoader: ClassLoader
+    ): String? {
+        return try {
+            val call = try {
+                XposedHelpers.callMethod(chain, "call")
+            } catch (_: Throwable) {
+                XposedHelpers.getObjectField(chain, "call")
+            } ?: return null
+
+            val client = try {
+                XposedHelpers.getObjectField(call, "client")
+            } catch (_: Throwable) {
+                XposedHelpers.callMethod(call, "client")
+            } ?: return null
+
+            val requestBuilder = XposedHelpers.callMethod(request, "newBuilder") ?: return null
+            val method = (XposedHelpers.callMethod(request, "method") as? String) ?: "GET"
+
+            if (method.equals("GET", ignoreCase = true)) {
+                val httpUrlObj = XposedHelpers.callMethod(request, "url") ?: return null
+                val oldUrl = httpUrlObj.toString()
+                val newUrl = updateUrlVariablesCursor(oldUrl, nextCursor)
+                if (newUrl == oldUrl) return null
+
+                val httpUrlClass = XposedHelpers.findClassIfExists("okhttp3.HttpUrl", classLoader)
+                    ?: XposedHelpers.findClassIfExists("com.squareup.okhttp.HttpUrl", classLoader) ?: return null
+                val newHttpUrl = try {
+                    XposedHelpers.callStaticMethod(httpUrlClass, "get", newUrl)
+                } catch (_: Throwable) {
+                    XposedHelpers.callStaticMethod(httpUrlClass, "parse", newUrl)
+                } ?: return null
+                XposedHelpers.callMethod(requestBuilder, "url", newHttpUrl)
+            } else {
+                return null
+            }
+
+            val nextRequest = XposedHelpers.callMethod(requestBuilder, "build") ?: return null
+            val nextCall = XposedHelpers.callMethod(client, "newCall", nextRequest) ?: return null
+            val nextResponse = XposedHelpers.callMethod(nextCall, "execute") ?: return null
+
+            val code = (XposedHelpers.callMethod(nextResponse, "code") as? Int) ?: 200
+            if (code !in 200..299) return null
+
+            val nextBody = XposedHelpers.callMethod(nextResponse, "body") ?: return null
+            val nextInputStream = XposedHelpers.callMethod(nextBody, "byteStream") as? InputStream ?: return null
+            val nextRawBytes = nextInputStream.readBytes()
+            if (nextRawBytes.isEmpty()) return null
+
+            val nextContentEncoding = XposedHelpers.callMethod(nextResponse, "header", "Content-Encoding") as? String
+            val isGzip = nextContentEncoding?.equals("gzip", ignoreCase = true) == true
+
+            if (isGzip) {
+                GZIPInputStream(ByteArrayInputStream(nextRawBytes)).bufferedReader(Charsets.UTF_8).use { it.readText() }
+            } else {
+                String(nextRawBytes, Charsets.UTF_8)
+            }
+        } catch (t: Throwable) {
+            android.util.Log.e(TAG, "fetchNextPageJson error: ${t.message}", t)
+            null
+        }
+    }
+
 
     private fun isIgnoredEndpoint(url: String): Boolean {
         val path = url.substringBefore('?').lowercase()

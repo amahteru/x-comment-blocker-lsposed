@@ -254,4 +254,94 @@ class GraphQLInterceptorTest {
         assertEquals(1, moduleItems.length())
         assertEquals("module-reply-1", moduleItems.getJSONObject(0).getString("entryId"))
     }
+
+    @Test
+    fun testCountValidCommentEntriesAndExtractBottomCursor() {
+        val json = """
+        {
+          "data": {
+            "threaded_conversation_with_injections_v2": {
+              "instructions": [
+                {
+                  "type": "TimelineAddEntries",
+                  "entries": [
+                    { "entryId": "conversationthread-1", "content": {} },
+                    { "entryId": "conversationthread-2", "content": {} },
+                    { "entryId": "promoted-3", "content": {} },
+                    { "entryId": "cursor-bottom-12345", "content": { "value": "CURSOR_NEXT_PAGE_123", "cursorType": "Bottom" } }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+        """.trimIndent()
+
+        val count = GraphQLInterceptor.countValidCommentEntries(json)
+        val cursor = GraphQLInterceptor.extractBottomCursor(json)
+
+        assertEquals(2, count)
+        assertEquals("CURSOR_NEXT_PAGE_123", cursor)
+    }
+
+    @Test
+    fun testMergeTimelineResponses() {
+        val page1Json = """
+        {
+          "data": {
+            "threaded_conversation_with_injections_v2": {
+              "instructions": [
+                {
+                  "type": "TimelineAddEntries",
+                  "entries": [
+                    { "entryId": "tweet-normal-1", "content": {} },
+                    { "entryId": "cursor-bottom-page1", "content": { "value": "CURSOR_PAGE_2", "cursorType": "Bottom" } }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+        """.trimIndent()
+
+        val page2Json = """
+        {
+          "data": {
+            "threaded_conversation_with_injections_v2": {
+              "instructions": [
+                {
+                  "type": "TimelineAddEntries",
+                  "entries": [
+                    { "entryId": "tweet-normal-2", "content": {} },
+                    { "entryId": "tweet-normal-3", "content": {} },
+                    { "entryId": "cursor-bottom-page2", "content": { "value": "CURSOR_PAGE_3", "cursorType": "Bottom" } }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+        """.trimIndent()
+
+        val merged = GraphQLInterceptor.mergeTimelineResponses(page1Json, page2Json)
+        val count = GraphQLInterceptor.countValidCommentEntries(merged)
+        val cursor = GraphQLInterceptor.extractBottomCursor(merged)
+
+        assertEquals(3, count)
+        assertEquals("CURSOR_PAGE_3", cursor)
+
+        val root = JSONObject(merged)
+        val entries = root.getJSONObject("data")
+            .getJSONObject("threaded_conversation_with_injections_v2")
+            .getJSONArray("instructions")
+            .getJSONObject(0)
+            .getJSONArray("entries")
+
+        assertEquals(4, entries.length()) // 3 tweets + 1 bottom cursor
+        assertEquals("tweet-normal-1", entries.getJSONObject(0).getString("entryId"))
+        assertEquals("tweet-normal-2", entries.getJSONObject(1).getString("entryId"))
+        assertEquals("tweet-normal-3", entries.getJSONObject(2).getString("entryId"))
+        assertEquals("cursor-bottom-page2", entries.getJSONObject(3).getString("entryId"))
+    }
 }
+

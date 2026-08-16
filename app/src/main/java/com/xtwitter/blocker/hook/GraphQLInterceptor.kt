@@ -509,4 +509,130 @@ object GraphQLInterceptor {
         )
         return filterResult is FilterResult.Blocked
     }
+
+    fun getTimelineContainer(root: JSONObject): JSONObject? {
+        val data = root.optJSONObject("data") ?: root
+        val threadedConv = data.optJSONObject("threaded_conversation_with_injections_v2")
+        if (threadedConv != null) return threadedConv
+
+        val timelineResp = data.optJSONObject("timelineResponse") ?: data.optJSONObject("timeline_response")
+        if (timelineResp != null) {
+            return timelineResp.optJSONObject("timeline") ?: timelineResp
+        }
+
+        return data.optJSONObject("timeline")
+            ?: data.optJSONObject("conversation_timeline")
+            ?: data.optJSONObject("tweet_detail")
+            ?: data.optJSONObject("threaded_conversation")
+            ?: data.optJSONObject("home")?.optJSONObject("home_timeline_urt")
+            ?: data.optJSONObject("bookmarks_timeline")?.optJSONObject("timeline")
+            ?: data.optJSONObject("search_by_raw_query")?.optJSONObject("search_timeline")
+            ?: data.optJSONObject("user")?.optJSONObject("result")?.optJSONObject("timeline")?.optJSONObject("timeline")
+            ?: data.optJSONObject("user")?.optJSONObject("result")?.optJSONObject("timeline_response")
+            ?: if (data.has("instructions")) data else null
+    }
+
+    fun getTimelineAddEntries(container: JSONObject): JSONArray? {
+        val instructions = container.optJSONArray("instructions") ?: return null
+        for (i in 0 until instructions.length()) {
+            val instr = instructions.optJSONObject(i) ?: continue
+            val type = instr.optString("type", "").ifEmpty { instr.optString("__typename", "") }
+            if (type.equals("TimelineAddEntries", ignoreCase = true) || instr.has("entries")) {
+                val entries = instr.optJSONArray("entries")
+                if (entries != null) return entries
+            }
+        }
+        return null
+    }
+
+    fun countValidCommentEntries(json: String): Int {
+        return try {
+            val root = JSONObject(json)
+            val container = getTimelineContainer(root) ?: return 0
+            val entries = getTimelineAddEntries(container) ?: return 0
+            var count = 0
+            for (i in 0 until entries.length()) {
+                val entry = entries.optJSONObject(i) ?: continue
+                val entryId = entry.optString("entryId", "").ifEmpty { entry.optString("entry_id", "") }
+                if (entryId.startsWith("cursor-") || entryId.startsWith("cursor_")) continue
+                if (entryId.startsWith("tombstone-") || entryId.startsWith("tombstone_")) continue
+                if (entryId.startsWith("promoted-") || entryId.startsWith("promoted_") || entryId.startsWith("promotedTweet-")) continue
+                if (entryId.startsWith("who-to-follow") || entryId.startsWith("who_to_follow")) continue
+                count++
+            }
+            count
+        } catch (_: Throwable) {
+            0
+        }
+    }
+
+    fun extractBottomCursor(json: String): String? {
+        return try {
+            val root = JSONObject(json)
+            val container = getTimelineContainer(root) ?: return null
+            val entries = getTimelineAddEntries(container) ?: return null
+            for (i in entries.length() - 1 downTo 0) {
+                val entry = entries.optJSONObject(i) ?: continue
+                val entryId = entry.optString("entryId", "").ifEmpty { entry.optString("entry_id", "") }
+                val content = entry.optJSONObject("content") ?: entry
+                val cursorType = content.optString("cursorType", "").ifEmpty {
+                    content.optJSONObject("itemContent")?.optString("cursorType", "") ?: ""
+                }
+                val isBottom = cursorType.equals("Bottom", ignoreCase = true) ||
+                        cursorType.equals("BottomCursor", ignoreCase = true) ||
+                        entryId.contains("cursor-bottom", ignoreCase = true) ||
+                        entryId.contains("cursor_bottom", ignoreCase = true)
+                if (isBottom) {
+                    val value = content.optString("value", "").ifEmpty {
+                        content.optJSONObject("itemContent")?.optString("value", "") ?: ""
+                    }
+                    if (value.isNotEmpty()) return value
+                }
+            }
+            null
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    fun mergeTimelineResponses(firstJson: String, secondJson: String): String {
+        return try {
+            val root1 = JSONObject(firstJson)
+            val root2 = JSONObject(secondJson)
+
+            val container1 = getTimelineContainer(root1) ?: return firstJson
+            val container2 = getTimelineContainer(root2) ?: return firstJson
+
+            val entries1 = getTimelineAddEntries(container1) ?: return firstJson
+            val entries2 = getTimelineAddEntries(container2) ?: return firstJson
+
+            // Remove existing bottom cursor from entries1
+            for (i in entries1.length() - 1 downTo 0) {
+                val entry = entries1.optJSONObject(i) ?: continue
+                val entryId = entry.optString("entryId", "").ifEmpty { entry.optString("entry_id", "") }
+                val content = entry.optJSONObject("content") ?: entry
+                val cursorType = content.optString("cursorType", "").ifEmpty {
+                    content.optJSONObject("itemContent")?.optString("cursorType", "") ?: ""
+                }
+                if (cursorType.equals("Bottom", ignoreCase = true) ||
+                    cursorType.equals("BottomCursor", ignoreCase = true) ||
+                    entryId.contains("cursor-bottom", ignoreCase = true) ||
+                    entryId.contains("cursor_bottom", ignoreCase = true)) {
+                    entries1.remove(i)
+                }
+            }
+
+            // Append all entries from entries2
+            for (i in 0 until entries2.length()) {
+                val entry = entries2.optJSONObject(i) ?: continue
+                entries1.put(entry)
+            }
+
+            root1.toString()
+        } catch (t: Throwable) {
+            android.util.Log.e("XCommentBlocker-Hook", "mergeTimelineResponses error: ${t.message}", t)
+            firstJson
+        }
+    }
 }
+
