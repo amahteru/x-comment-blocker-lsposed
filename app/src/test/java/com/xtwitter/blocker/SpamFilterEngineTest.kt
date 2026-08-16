@@ -93,4 +93,85 @@ class SpamFilterEngineTest {
         assertTrue(result is FilterResult.Blocked)
         assertEquals(FilterResult.BlockReason.PROMOTED_AD, (result as FilterResult.Blocked).reason)
     }
+
+    @Test
+    fun testFullwidthAndCompatibilityUnicodeMatching() {
+        engine.updateKeywords(
+            cloudKeywords = "（接任务\n今夜🈲️不归",
+            userKeywords = ""
+        )
+
+        // 1. Full-width bracket match (豆豆母狗（接任务)
+        val res1 = engine.shouldBlockTweet(
+            fullText = "🤐",
+            screenName = "oriwen368540",
+            name = "豆豆母狗（接任务"
+        )
+        assertTrue("豆豆母狗（接任务 should be blocked by （接任务", res1 is FilterResult.Blocked)
+
+        // 2. Compatibility character match (今夜🈲️不归)
+        val res2 = engine.shouldBlockTweet(
+            fullText = "😍",
+            screenName = "seanwhite147409",
+            name = "今夜🈲️不归"
+        )
+        assertTrue("今夜🈲️不归 should be blocked by 今夜🈲️不归", res2 is FilterResult.Blocked)
+    }
+
+    @Test
+    fun testEmojiRegexOnRawAndNormalized() {
+        val regex = "/(?=.*(?:🍑|🈷️|❤️))(?=.*(?:今夜|今晚|不归))/"
+        engine.updateKeywords(regex, "")
+
+        // 1. 今夜🈷️不归
+        val res1 = engine.shouldBlockTweet(
+            fullText = "😍",
+            screenName = "user1",
+            name = "今夜🈷️不归"
+        )
+        assertTrue("今夜🈷️不归 should be blocked by emoji regex", res1 is FilterResult.Blocked)
+
+        // 2. 今晚🈷️不归
+        val res2 = engine.shouldBlockTweet(
+            fullText = "😍",
+            screenName = "user2",
+            name = "今晚🈷️不归"
+        )
+        assertTrue("今晚🈷️不归 should be blocked by emoji regex", res2 is FilterResult.Blocked)
+    }
+
+    @Test
+    fun testCompleteKeywordsTxtIntegration() {
+        val file = java.io.File("../x-comment-blocker/keywords.txt").let {
+            if (it.exists()) it else java.io.File("../../x-comment-blocker/keywords.txt")
+        }
+        if (file.exists()) {
+            val keywordsTxt = file.readText()
+            engine.updateKeywords(keywordsTxt, "")
+
+            // 1. 豆豆母狗（接任务
+            val res1 = engine.shouldBlockTweet(
+                fullText = "🤐",
+                screenName = "oriwen368540",
+                name = "豆豆母狗（接任务"
+            )
+            assertTrue("豆豆母狗（接任务 must be blocked by keywords.txt", res1 is FilterResult.Blocked)
+
+            // 2. 今夜🈷️不归
+            val res2 = engine.shouldBlockTweet(
+                fullText = "😍",
+                screenName = "seanwhite147409",
+                name = "今夜🈷️不归"
+            )
+            assertTrue("今夜🈷️不归 must be blocked by keywords.txt", res2 is FilterResult.Blocked)
+
+            // 3. Normal tweet must pass
+            val resNormal = engine.shouldBlockTweet(
+                fullText = "今天天气真好，出去散步！",
+                screenName = "normal_user",
+                name = "张三"
+            )
+            assertEquals(FilterResult.Pass, resNormal)
+        }
+    }
 }
