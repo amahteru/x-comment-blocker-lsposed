@@ -45,58 +45,54 @@ class SpamFilterEngine {
         customRegexes = (parsedCloud.customRegexes + parsedUser.customRegexes).distinct()
     }
 
-    /**
-     * Checks if a specific text (tweet text, name, etc.) matches any keyword rule.
-     */
-    fun matchesKeywords(text: String?): Boolean {
-        if (text.isNullOrEmpty()) return false
+    fun getMatchingRule(text: String?): String? {
+        if (text.isNullOrEmpty()) return null
         val withoutInvisible = SpamCharCleaner.removeInvisibleChars(text)
         val normalized = SpamCharCleaner.normalizeText(text)
 
-        // 1. Check custom regexes on raw text (preserves original emojis like 🈷️, 🍑, ❤️ from being converted to Chinese chars by NFKC)
         for (regex in customRegexes) {
-            if (regex.matcher(withoutInvisible).find()) return true
+            if (regex.matcher(withoutInvisible).find()) return "CustomRegex: ${regex.pattern()}"
         }
-
-        // 2. Check Trie pattern and custom regexes on NFKC normalized text
         triePattern?.let { pattern ->
-            if (pattern.matcher(normalized).find()) return true
+            val m = pattern.matcher(normalized)
+            if (m.find()) return "TrieKeyword: [${m.group()}]"
         }
         for (regex in customRegexes) {
-            if (regex.matcher(normalized).find()) return true
+            if (regex.matcher(normalized).find()) return "CustomRegexNorm: ${regex.pattern()}"
         }
-
-        // 3. If raw text differs from normalized, also check Trie pattern on raw text
         if (withoutInvisible != normalized) {
             triePattern?.let { pattern ->
-                if (pattern.matcher(withoutInvisible).find()) return true
+                val m = pattern.matcher(withoutInvisible)
+                if (m.find()) return "TrieKeywordRaw: [${m.group()}]"
             }
         }
-
-        // 4. Secondary check: text without whitespace and common delimiter characters (catches "找.萢友", "微 信", "同-城-约", "母狗（接任务")
-        // Aligned with desktop extension: userName.replaceAll(/[\s_.\-]+/gv, '')
         val withoutSeparatorsNorm = SpamCharCleaner.removeSeparators(normalized)
         if (withoutSeparatorsNorm.isNotEmpty() && withoutSeparatorsNorm.length != normalized.length) {
             triePattern?.let { pattern ->
-                if (pattern.matcher(withoutSeparatorsNorm).find()) return true
+                val m = pattern.matcher(withoutSeparatorsNorm)
+                if (m.find()) return "TrieKeywordNoSepNorm: [${m.group()}]"
             }
             for (regex in customRegexes) {
-                if (regex.matcher(withoutSeparatorsNorm).find()) return true
+                if (regex.matcher(withoutSeparatorsNorm).find()) return "CustomRegexNoSepNorm: ${regex.pattern()}"
             }
         }
-
         val withoutSeparatorsRaw = SpamCharCleaner.removeSeparators(withoutInvisible)
         if (withoutSeparatorsRaw.isNotEmpty() && withoutSeparatorsRaw != withoutSeparatorsNorm && withoutSeparatorsRaw.length != withoutInvisible.length) {
             triePattern?.let { pattern ->
-                if (pattern.matcher(withoutSeparatorsRaw).find()) return true
+                val m = pattern.matcher(withoutSeparatorsRaw)
+                if (m.find()) return "TrieKeywordNoSepRaw: [${m.group()}]"
             }
             for (regex in customRegexes) {
-                if (regex.matcher(withoutSeparatorsRaw).find()) return true
+                if (regex.matcher(withoutSeparatorsRaw).find()) return "CustomRegexNoSepRaw: ${regex.pattern()}"
             }
         }
-
-        return false
+        return null
     }
+
+    /**
+     * Checks if a specific text (tweet text, name, etc.) matches any keyword rule.
+     */
+    fun matchesKeywords(text: String?): Boolean = getMatchingRule(text) != null
 
     /**
      * Evaluates a tweet/comment against all configured rules.

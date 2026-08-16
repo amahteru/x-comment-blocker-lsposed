@@ -406,6 +406,11 @@ object TwitterHook {
                 path.contains("notifications") ||
                 path.contains("/dm/") ||
                 path.contains("direct_messages") ||
+                path.contains("bookmarkstimeline") ||
+                path.contains("/bookmarks") ||
+                path.contains("usertweets") ||
+                path.contains("usermedia") ||
+                path.contains("likes") ||
                 path.contains("badge") ||
                 path.contains("auth") ||
                 path.contains("login") ||
@@ -417,13 +422,11 @@ object TwitterHook {
     private fun isPotentialTimelineJson(json: String): Boolean {
         val trimmed = json.trimStart()
         if (!trimmed.startsWith("{")) return false
-        return trimmed.contains("\"instructions\"") ||
-                trimmed.contains("\"itemContent\"") ||
-                trimmed.contains("\"tweet_results\"") ||
-                trimmed.contains("\"threaded_conversation\"") ||
-                trimmed.contains("\"home_timeline_urt\"") ||
-                trimmed.contains("\"timelineResponse\"") ||
-                trimmed.contains("\"timeline\"")
+        return trimmed.contains("\"threaded_conversation") ||
+                trimmed.contains("\"conversation_timeline") ||
+                trimmed.contains("\"tweet_detail") ||
+                trimmed.contains("\"timelineResponse") ||
+                (trimmed.contains("\"instructions\"") && (trimmed.contains("\"TimelineAddEntries\"") || trimmed.contains("\"TimelineAddToModule\"")))
     }
 
     private fun createResponseBody(bytes: ByteArray, contentType: Any?, classLoader: ClassLoader): Any? {

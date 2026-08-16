@@ -343,5 +343,61 @@ class GraphQLInterceptorTest {
         assertEquals("tweet-normal-3", entries.getJSONObject(2).getString("entryId"))
         assertEquals("cursor-bottom-page2", entries.getJSONObject(3).getString("entryId"))
     }
+
+    @Test
+    fun testBookmarksTimelineNotModifiedEvenWithSpamKeywords() {
+        val bookmarksJson = """
+        {
+          "data": {
+            "bookmarks_timeline": {
+              "timeline": {
+                "instructions": [
+                  {
+                    "type": "TimelineAddEntries",
+                    "entries": [
+                      {
+                        "entryId": "tweet-bookmarked-1",
+                        "content": {
+                          "itemContent": {
+                            "itemType": "TimelineTweet",
+                            "tweet_results": {
+                              "result": {
+                                "__typename": "Tweet",
+                                "core": {
+                                  "user_results": {
+                                    "result": {
+                                      "legacy": {
+                                        "screen_name": "LIGHTSEEKER1984",
+                                        "name": "The Gulag Bot"
+                                      }
+                                    }
+                                  }
+                                },
+                                "legacy": {
+                                  "full_text": "看到男人因为无偿帮助别人走红，同城约福利群"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+        """.trimIndent()
+
+        val bookmarkUrl = "https://api.x.com/graphql/gjLh8Udow_VslrHJbEqLiQ/BookmarksTimelineQuery?variables=%7B%7D"
+        val filtered = GraphQLInterceptor.filterJsonResponse(bookmarksJson, engine, bookmarkUrl)
+
+        // Bookmarks JSON MUST remain completely identical / unmodified!
+        assertEquals(bookmarksJson, filtered)
+        assertTrue(filtered.contains("tweet-bookmarked-1"))
+        assertTrue(filtered.contains("The Gulag Bot"))
+        assertTrue(filtered.contains("无偿帮助别人"))
+    }
 }
 

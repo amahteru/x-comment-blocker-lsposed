@@ -34,6 +34,7 @@ object GraphQLInterceptor {
                     url?.contains("TweetReplies", ignoreCase = true) == true ||
                     url?.contains("ThreadedConversation", ignoreCase = true) == true
 
+            // 1. Threaded conversation (Primary modern GraphQL structure for tweet comments)
             val threadedConversation = data.optJSONObject("threaded_conversation_with_injections_v2")
             if (threadedConversation != null) {
                 if (processTimelineContainer(threadedConversation, engine, isConversationTimeline = true)) {
@@ -41,6 +42,7 @@ object GraphQLInterceptor {
                 }
             }
 
+            // 2. Timeline response (Classic or intermediate GraphQL structure)
             val timelineResponse = data.optJSONObject("timelineResponse") ?: data.optJSONObject("timeline_response")
             val isTimelineResponseConv = isUrlConversation ||
                     timelineResponse?.optString("id", "")?.contains("Replies", ignoreCase = true) == true ||
@@ -53,30 +55,23 @@ object GraphQLInterceptor {
                 }
             }
 
-            // Try all possible other timeline root containers
-            val otherCandidates = listOf(
-                data.optJSONObject("timeline"),
+            // 3. Other conversation timeline containers (strictly comment/conversation endpoints)
+            val otherCandidates = listOfNotNull(
                 data.optJSONObject("conversation_timeline"),
                 data.optJSONObject("tweet_detail"),
                 data.optJSONObject("threaded_conversation"),
-                data.optJSONObject("home")?.optJSONObject("home_timeline_urt"),
-                data.optJSONObject("bookmarks_timeline")?.optJSONObject("timeline"),
-                data.optJSONObject("search_by_raw_query")?.optJSONObject("search_timeline"),
-                data.optJSONObject("user")?.optJSONObject("result")?.optJSONObject("timeline")?.optJSONObject("timeline"),
-                data.optJSONObject("user")?.optJSONObject("result")?.optJSONObject("timeline_response"),
-                if (threadedConversation == null && timelineResponse == null) data else null
+                if (isUrlConversation || url == null) (data.optJSONObject("timeline") ?: if (threadedConversation == null && timelineResponse == null && data.has("instructions")) data else null) else null
             )
 
             for (timeline in otherCandidates) {
-                if (timeline == null) continue
-                if (processTimelineContainer(timeline, engine, isConversationTimeline = isUrlConversation)) {
+                if (processTimelineContainer(timeline, engine, isConversationTimeline = true)) {
                     modified = true
                 }
             }
 
             if (modified) root.toString() else json
         } catch (t: Throwable) {
-            android.util.Log.e("XCommentBlocker-Hook", "filterJsonResponse error: ${t.message}", t)
+            try { android.util.Log.e("XCommentBlocker-Hook", "filterJsonResponse error: ${t.message}", t) } catch (_: Throwable) {}
             json
         }
     }
@@ -507,7 +502,18 @@ object GraphQLInterceptor {
             isPromoted = isPromoted,
             hasGrokCard = hasGrokCard
         )
-        return filterResult is FilterResult.Blocked
+        if (filterResult is FilterResult.Blocked) {
+            val matchedTextRule = engine.getMatchingRule(fullText)
+            val matchedUserRule = engine.getMatchingRule(screenName) ?: engine.getMatchingRule(name)
+            try {
+                android.util.Log.w("XCommentBlocker-Hook", "BLOCKED: author=@$screenName ($name), reason=${filterResult.reason}, matchedTextRule=[$matchedTextRule], matchedUserRule=[$matchedUserRule], fullText=[$fullText]")
+            } catch (_: Throwable) {}
+            try {
+                de.robv.android.xposed.XposedBridge.log("[XCommentBlocker-Hook] BLOCKED: author=@$screenName ($name), reason=${filterResult.reason}, matchedText=[$matchedTextRule], matchedUser=[$matchedUserRule], fullText=[$fullText]")
+            } catch (_: Throwable) {}
+            return true
+        }
+        return false
     }
 
     fun getTimelineContainer(root: JSONObject): JSONObject? {
@@ -520,15 +526,10 @@ object GraphQLInterceptor {
             return timelineResp.optJSONObject("timeline") ?: timelineResp
         }
 
-        return data.optJSONObject("timeline")
-            ?: data.optJSONObject("conversation_timeline")
+        return data.optJSONObject("conversation_timeline")
             ?: data.optJSONObject("tweet_detail")
             ?: data.optJSONObject("threaded_conversation")
-            ?: data.optJSONObject("home")?.optJSONObject("home_timeline_urt")
-            ?: data.optJSONObject("bookmarks_timeline")?.optJSONObject("timeline")
-            ?: data.optJSONObject("search_by_raw_query")?.optJSONObject("search_timeline")
-            ?: data.optJSONObject("user")?.optJSONObject("result")?.optJSONObject("timeline")?.optJSONObject("timeline")
-            ?: data.optJSONObject("user")?.optJSONObject("result")?.optJSONObject("timeline_response")
+            ?: data.optJSONObject("timeline")
             ?: if (data.has("instructions")) data else null
     }
 
